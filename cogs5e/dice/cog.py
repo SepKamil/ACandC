@@ -235,7 +235,10 @@ class Dice(commands.Cog):
         args = await helpers.parse_snippets(args, ctx, statblock=monster)
         args = argparse(args)
 
-        embed = embed_for_monster(monster, args)
+        embed = discord.Embed()
+        embed.colour = random.randint(0, 0xFFFFFF)
+        if not args.last("h", type_=bool):
+            embed.set_thumbnail(url=monster.get_image_url())
 
         checkutils.run_save(save_stat, monster, args, embed)
 
@@ -265,8 +268,8 @@ class Dice(commands.Cog):
                 spell = await select_spell_full(ctx, spell_name, list_filter=lambda s: s.name in monster.spellbook)
             except NoSelectionElements:
                 return await ctx.send(
-                    "No matching spells found in the creature's spellbook. Cast again "
-                    "with the `-i` argument to ignore restrictions!"
+                    f"No matching spells found in the creature's spellbook. Cast again "
+                    f"with the `-i` argument to ignore restrictions!"
                 )
         else:
             spell = await select_spell_full(ctx, spell_name)
@@ -275,7 +278,11 @@ class Dice(commands.Cog):
         result = await spell.cast(ctx, caster, targets, args, combat=combat)
 
         # embed display
-        embed = embed_for_monster(monster, args, result.embed)
+        embed = result.embed
+        embed.colour = random.randint(0, 0xFFFFFF)
+        if not args.last("h", type_=bool) and "thumb" not in args:
+            embed.set_thumbnail(url=monster.get_image_url())
+
         handle_source_footer(embed, monster, add_source_str=False)
 
         # save changes: combat state
@@ -297,10 +304,9 @@ class Dice(commands.Cog):
         await self.inline.handle_reaction_inline_rolls(reaction, user)
 
 
-def embed_for_monster(monster, args, embed=None):
-    if not embed:
-        embed = discord.Embed()
+def embed_for_monster(monster, args):
+    embed = discord.Embed()
     embed.colour = random.randint(0, 0xFFFFFF)
-    if not args.last("h", type_=bool) and "thumb" not in args:
+    if not args.last("h", type_=bool):
         embed.set_thumbnail(url=monster.get_image_url())
     return embed

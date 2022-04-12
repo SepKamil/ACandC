@@ -31,7 +31,7 @@ class ServerSettingsMenuBase(MenuBase, abc.ABC):
 
     async def get_inline_rolling_desc(self) -> str:
         flag_enabled = await self.bot.ldclient.variation(
-            "cog.dice.inline_rolling.enabled", user=discord_user_to_dict(self.owner), default=False
+            "cog.dice.inline_rolling.enabled", user=discord_user_to_dict(self.owner), default=True
         )
         if not flag_enabled:
             return "Inline rolling is currently **globally disabled** for all users. Check back soon!"
