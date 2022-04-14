@@ -4,6 +4,7 @@ import d20
 import draconic
 
 from cogs5e.models.sheet.resistance import Resistances, do_resistances
+from utils.enums import CritDamageType
 from . import Effect
 from .roll import RollEffectMetaVar
 from .. import utils
@@ -49,7 +50,10 @@ class Damage(Effect):
         mi_arg = args.last("mi", None, int)
         dtype_args = args.get("dtype", [], ephem=True)
         critdice = sum(args.get("critdice", type_=int))
+        savage = args.last("savage", None, bool, ephem=True)
         hide = args.last("h", type_=bool)
+
+        crit_damage_type = autoctx.crit_type
 
         # character-specific arguments
         if autoctx.character and "critdice" not in args:
@@ -77,6 +81,11 @@ class Damage(Effect):
         dice_ast = copy.copy(d20.parse(damage))
         dice_ast = utils.upcast_scaled_dice(self, autoctx, dice_ast)
 
+        if savage:
+            dice_ast.roll = d20.ast.OperatedSet(
+                d20.ast.NumberSet([dice_ast.roll, dice_ast.roll]), d20.SetOperator("k", [d20.SetSelector("h", 1)])
+            )
+
         # -mi # (#527)
         if mi_arg:
             dice_ast = d20.utils.tree_map(utils.mi_mapper(mi_arg), dice_ast)
@@ -91,9 +100,21 @@ class Damage(Effect):
         # Disable critical damage in saves (#1556)
         in_crit = (autoctx.in_crit or crit_arg) and not (nocrit or autoctx.in_save)
         if in_crit:
-            dice_ast = d20.utils.tree_map(utils.crit_mapper, dice_ast)
+            if crit_damage_type == CritDamageType.MAX_ADD:
+                dice_ast = utils.tree_map_prefix(utils.max_add_crit_mapper, dice_ast)
+            elif crit_damage_type == CritDamageType.DOUBLE_ALL:
+                dice_ast.roll = d20.ast.BinOp(d20.ast.Parenthetical(dice_ast.roll), "*", d20.ast.Literal(2))
+            elif crit_damage_type == CritDamageType.DOUBLE_DICE:
+                dice_ast = utils.tree_map_prefix(utils.double_dice_crit_mapper, dice_ast)
+            else:
+                dice_ast = d20.utils.tree_map(utils.crit_mapper, dice_ast)
             if critdice and not autoctx.is_spell:
-                utils.critdice_tree_update(dice_ast, int(critdice))
+                if crit_damage_type in (CritDamageType.DOUBLE_ALL, CritDamageType.DOUBLE_DICE):
+                    crit_ast = utils.crit_dice_gen(dice_ast, critdice)
+                    if crit_ast:
+                        dice_ast.roll = d20.ast.BinOp(dice_ast.roll, "+", crit_ast)
+                else:
+                    utils.critdice_tree_update(dice_ast, int(critdice))
 
         # -c #
         if in_crit:

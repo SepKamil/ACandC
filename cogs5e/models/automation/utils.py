@@ -1,7 +1,9 @@
+import copy
 from typing import Callable
 
 import d20
 import draconic
+from d20.utils import TreeType
 
 import aliasing.api.statblock
 from cogs5e.models.sheet.statblock import StatBlock
@@ -64,11 +66,46 @@ def max_mapper(node: d20.ast.Node):
     return node
 
 
+def max_add_crit_mapper(node: d20.ast.Node):
+    """A function that adds the maximum value of each Dice AST node as a literal
+
+    :return: A tuple containing the node and a bool for if the tree mapper should continue.
+    :rtype: tuple(node, bool)
+    """
+    if isinstance(node, d20.ast.OperatedDice):
+        return d20.ast.BinOp(node, "+", d20.ast.Literal(node.value.num * node.value.size)), False
+    if isinstance(node, d20.ast.Dice):
+        return d20.ast.BinOp(node, "+", d20.ast.Literal(node.num * node.size)), False
+    return node, True
+
+
 def crit_mapper(node: d20.ast.Node):
     """A function that doubles the number of dice for each Dice AST node."""
     if isinstance(node, d20.ast.Dice):
         return d20.ast.Dice(node.num * 2, node.size)
     return node
+
+
+def double_dice_crit_mapper(node: d20.ast.Node):
+    """A function that replaces each Dice AST node with itself multiplied by 2.
+
+    :return: A tuple containing the node and a bool for if the tree mapper should continue.
+    :rtype: tuple(node, bool)
+    """
+    if isinstance(node, (d20.ast.OperatedDice, d20.ast.Dice)):
+        return d20.ast.BinOp(node, "*", d20.ast.Literal(2)), False
+    return node, True
+
+
+def crit_dice_gen(dice_ast: d20.ast.Node, critdice: int):
+    """A function that finds the size of left most Dice AST node and generates crit dice based on that, for
+    crit types that double all original dice, but not any additional crit dice. By finding the left most dice,
+    we do our best to ensure its based on the weapon/source and not any other additional bonuses."""
+    left = d20.utils.leftmost(dice_ast)
+
+    # if we're at the bottom of the branch and it's the dice, add *critdice*
+    if isinstance(left, d20.ast.Dice):
+        return d20.ast.Dice(critdice, left.size)
 
 
 def critdice_tree_update(dice_ast: d20.ast.Node, critdice: int):
@@ -115,3 +152,18 @@ def target_hp_or_default(target, default):
         return target.hp
     else:
         return default
+
+
+def tree_map_prefix(func: Callable[[TreeType], tuple[TreeType, bool]], node: TreeType) -> TreeType:
+    """
+    Returns a copy of the tree, with each node replaced with ``func(node)[0]``.
+
+    :param func: A transformer function that takes a node and returns a tuple (replacement, continue_iteration).
+    :param node: The root of the tree to transform.
+    """
+    copied = copy.copy(node)
+    operated, continue_iteration = func(copied)
+    if continue_iteration:
+        for i, child in enumerate(copied.children):
+            copied.set_child(i, tree_map_prefix(func, child))
+    return operated

@@ -102,7 +102,7 @@ class CharacterSettingsUI(CharacterSettingsMenuBase):
     async def get_content(self):
         embed = embeds.EmbedWithCharacter(self.character, title=f"Character Settings for {self.character.name}")
         embed.add_field(
-            name="Cosmetic Settings",
+            name="__Cosmetic Settings__",
             value=f"**Embed Color**: {color_setting_desc(self.settings.color)}\n"
             f"**Show Character Image**: {self.settings.embed_image}\n"
             f"**Use Compact Coin Display:** {self.settings.compact_coins}\n"
@@ -110,7 +110,7 @@ class CharacterSettingsUI(CharacterSettingsMenuBase):
             inline=False,
         )
         embed.add_field(
-            name="Gameplay Settings",
+            name="__Gameplay Settings__",
             value=f"**Crit Range**: {crit_range_desc(self.settings.crit_on)}\n"
             f"**Extra Crit Dice**: {self.settings.extra_crit_dice}\n"
             f"**Reroll**: {self.settings.reroll}\n"
@@ -127,7 +127,7 @@ class CharacterSettingsUI(CharacterSettingsMenuBase):
                 sync_desc_lines.append(f"**Outbound Sync**: {self.settings.sync_outbound}")
             if inbound:
                 sync_desc_lines.append(f"**Inbound Sync**: {self.settings.sync_inbound}")
-            embed.add_field(name="Character Sync Settings", value="\n".join(sync_desc_lines), inline=False)
+            embed.add_field(name="__Character Sync Settings__", value="\n".join(sync_desc_lines), inline=False)
         return {"embed": embed}
 
 
@@ -141,32 +141,24 @@ _AUTOCONVERT_SELECT_OPTIONS = [
 class _CosmeticSettingsUI(CharacterSettingsMenuBase):
     @disnake.ui.button(label="Select Color", style=disnake.ButtonStyle.primary)
     async def select_color(self, button: disnake.ui.Button, interaction: disnake.Interaction):
-        button.disabled = True
-        await self.refresh_content(interaction)
-        await interaction.send(
-            "Choose a new color by sending a message in this channel. You can use a hex code or color like `pink`.",
-            ephemeral=True,
-        )
-
-        try:
-            input_msg: disnake.Message = await self.bot.wait_for(
-                "message",
-                timeout=60,
-                check=lambda msg: msg.author == interaction.author and msg.channel.id == interaction.channel_id,
+        async with self.disable_component(interaction, button):
+            color = await self.prompt_message(
+                interaction,
+                "Choose a new color by sending a message in this channel. You can use a hex code or color like `pink`.",
             )
-            color_val = pydantic.color.Color(input_msg.content)
-            r, g, b = color_val.as_rgb_tuple(alpha=False)
-            self.settings.color = (r << 16) + (g << 8) + b
-            with suppress(disnake.HTTPException):
-                await input_msg.delete()
-        except (ValueError, asyncio.TimeoutError, pydantic.ValidationError):
-            await interaction.send("No valid color found. Press `Select Color` to try again.", ephemeral=True)
-        else:
+            if color is None:
+                await interaction.send(f"No valid color found. Press `{button.label}` to try again.", ephemeral=True)
+                return
+            try:
+                color_val = pydantic.color.Color(color)
+                r, g, b = color_val.as_rgb_tuple(alpha=False)
+                self.settings.color = (r << 16) + (g << 8) + b
+            except pydantic.errors.ColorError:
+                await interaction.send(f"No valid color found. Press `{button.label}` to try again.", ephemeral=True)
+                return
+
             await self.commit_settings()
             await interaction.send("Your embed color has been updated.", ephemeral=True)
-        finally:
-            button.disabled = False
-            await self.refresh_content(interaction)
 
     @disnake.ui.button(label="Reset Color", style=disnake.ButtonStyle.danger)
     async def reset_color(self, _: disnake.ui.Button, interaction: disnake.Interaction):
