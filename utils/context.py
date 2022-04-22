@@ -3,6 +3,7 @@ import logging
 import discord
 from discord.ext.commands import Context
 
+from cogs5e.exploration.explore import Explore
 from cogs5e.initiative import Combat
 from cogs5e.models.character import Character
 from utils.settings import ServerSettings
@@ -18,6 +19,7 @@ class AvraeContext(Context):
 
         self._character = _sentinel
         self._combat = _sentinel
+        self._exploration = _sentinel
         self._server_settings = _sentinel
         # NLP metadata
         self.nlp_is_alias = False  # set in aliasing.helpers
@@ -53,6 +55,19 @@ class AvraeContext(Context):
         combat = await Combat.from_ctx(self)
         self._combat = combat
         return combat
+
+    async def get_exploration(self):
+        """
+        Gets the combat exploration in this context.
+
+        :raises ExplorationNotFound: If the context has no combat (author has none active).
+        :rtype: Explore
+        """
+        if self._exploration is not _sentinel:
+            return self._exploration
+        explore = await Explore.from_ctx(self)
+        self._exploration = explore
+        return explore
 
     async def get_server_settings(self):
         """
