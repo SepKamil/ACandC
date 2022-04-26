@@ -260,23 +260,23 @@ class Effect:
         return "; ".join(out)
 
     # --- hooks ---
-    def on_turn(self, num_turns=1):
+    def on_round(self, num_rounds=1):
         """
-        Reduces the turn counter if applicable, and removes itself if at 0.
+        Reduces the round counter if applicable, and removes itself if at 0.
         """
         if self.remaining >= 0 and not self.ticks_on_end:
-            if self.remaining - num_turns <= 0:
+            if self.remaining - num_rounds <= 0:
                 self.remove()
-            self.remaining -= num_turns
+            self.remaining -= num_rounds
 
-    def on_turn_end(self, num_turns=1):
+    def on_round_end(self, num_rounds=1):
         """
-        Reduces the turn counter if applicable, and removes itself if at 0.
+        Reduces the round counter if applicable, and removes itself if at 0.
         """
         if self.remaining >= 0 and self.ticks_on_end:
-            if self.remaining - num_turns <= 0:
+            if self.remaining - num_rounds <= 0:
                 self.remove()
-            self.remaining -= num_turns
+            self.remaining -= num_rounds
 
     # parenting
     def get_parent_effect(self) -> Optional["Effect"]:

@@ -29,8 +29,6 @@ class Explorer(BaseExplorer, StatBlock):
         name: str,
         controller_id: str,
         private: bool,
-        init: int,
-        index: int = None,
         notes: str = None,
         effects: list = None,
         group_id: str = None,
@@ -71,10 +69,7 @@ class Explorer(BaseExplorer, StatBlock):
         self.id = id
 
         self._controller = controller_id
-        self._init = init
-
         self._private = private
-        self._index = index
         self._notes = notes
         self._effects = effects
         self._group_id = group_id
@@ -86,6 +81,8 @@ class Explorer(BaseExplorer, StatBlock):
         cls,
         name: str,
         controller_id: str,
+        private: bool,
+        resists: Resistances,
         ctx,
         exploration,
     ):
@@ -114,6 +111,351 @@ class Explorer(BaseExplorer, StatBlock):
         inst._effects = [Effect.from_dict(e, exploration, inst) for e in effects]
         return inst
 
+    def to_dict(self):
+        d = super().to_dict()
+        d.update(
+            {
+                "controller_id": self.controller,
+                "notes": self.notes,
+                "effects": [e.to_dict() for e in self._effects],
+                "group_id": self._group_id,
+                "type": self.type.value,
+                "id": self.id,
+            }
+        )
+        return d
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
+
+    @property
+    def controller(self):
+        return self._controller
+
+    @controller.setter
+    def controller(self, new_controller_id):
+        self._controller = new_controller_id
+
+    @property
+    def max_hp(self):
+        _maxhp = self._max_hp
+        _maxhp = combine_maybe_mods(self.active_effects("maxhp"), base=_maxhp)
+        return _maxhp
+
+    @max_hp.setter
+    def max_hp(self, new_max_hp):
+        self._max_hp = new_max_hp
+        if self._hp is None:
+            self._hp = new_max_hp
+
+    @property
+    def hp(self):
+        return self._hp
+
+    @hp.setter
+    def hp(self, new_hp):
+        self._hp = new_hp
+
+    def hp_str(self, private=False):
+        """Returns a string representation of the explorer's HP."""
+        out = ""
+        if not self.is_private or private:
+            if self.max_hp is not None and self.hp is not None:
+                out = f"<{self.hp}/{self.max_hp} HP>"
+            elif self.hp is not None:
+                out = f"<{self.hp} HP>"
+            else:
+                out = ""
+
+            if self.temp_hp and self.temp_hp > 0:
+                out += f" (+{self.temp_hp} temp)"
+        elif self.max_hp is not None and self.max_hp > 0:
+            ratio = self.hp / self.max_hp
+            if ratio >= 1:
+                out = "<Healthy>"
+            elif 0.5 < ratio < 1:
+                out = "<Injured>"
+            elif 0.15 < ratio <= 0.5:
+                out = "<Bloodied>"
+            elif 0 < ratio <= 0.15:
+                out = "<Critical>"
+            elif ratio <= 0:
+                out = "<Dead>"
+        return out
+
+    @property
+    def ac(self):
+        _ac = self._ac
+        _ac = combine_maybe_mods(self.active_effects("ac"), base=_ac)
+        return _ac
+
+    @ac.setter
+    def ac(self, new_ac):
+        self._ac = new_ac
+
+    @property
+    def is_private(self):
+        return self._private
+
+    @is_private.setter
+    def is_private(self, new_privacy):
+        self._private = new_privacy
+
+    @property
+    def resistances(self):
+        out = self._resistances.copy()
+        out.update(Resistances.from_dict({k: self.active_effects(k) for k in RESIST_TYPES}), overwrite=False)
+        return out
+
+    def set_resist(self, damage_type: str, resist_type: str):
+        if resist_type not in RESIST_TYPES:
+            raise ValueError("Resistance type is invalid")
+
+        resistance = Resistance.from_str(damage_type)
+
+        for rt in RESIST_TYPES:
+            for resist in reversed(self._resistances[rt]):
+                # remove any existing identical resistances, or any filtered variant of a given non-complex resistance
+                if resist == resistance or (not resistance.is_complex and resist.dtype == resistance.dtype):
+                    self._resistances[rt].remove(resist)
+
+        if resist_type != "neutral" or resistance.is_complex:
+            self._resistances[resist_type].append(resistance)
+
+    @property
+    def attacks(self):
+        if "attacks" not in self._cache:
+            # attacks granted by effects are cached so that the same object is referenced in initTracker (#950)
+            self._cache["attacks"] = self._attacks + AttackList.from_dict(self.active_effects("attack"))
+        return self._cache["attacks"]
+
+    @property
+    def notes(self):
+        return self._notes
+
+    @notes.setter
+    def notes(self, new_notes):
+        self._notes = new_notes
+
+    @property
+    def group(self):
+        return self._group_id
+
+    @group.setter
+    def group(self, value):
+        self._group_id = value
+
+    @property
+    def _effect_id_map(self):
+        return {e.id: e for e in self._effects}
+
+    def set_group(self, group_name):
+        self.exploration.remove_explorer(self, ignore_remove_hook=True)
+        if isinstance(group_name, str) and group_name.lower() == "none":
+            group_name = None
+        if group_name is None:
+            self.exploration.add_explorer(self)
+            return None
+        else:
+            c_group = self.exploration.get_group(group_name)
+            c_group.add_explorer(self)
+            return c_group
+
+    def get_group(self):
+        return self.exploration.get_group(self._group_id) if self._group_id else None
+
+    # effects
+    def add_effect(self, effect):
+        # handle name conflict
+        if self.get_effect(effect.name, True):
+            self.get_effect(effect.name).remove()
+
+        # handle concentration conflict
+        conc_conflict = []
+        if effect.concentration:
+            conc_conflict = self.remove_all_effects(lambda e: e.concentration)
+
+        # invalidate cache
+        self._invalidate_effect_cache()
+
+        self._effects.append(effect)
+        return {"conc_conflict": conc_conflict}
+
+    def get_effects(self):
+        return self._effects
+
+    def effect_by_id(self, effect_id):
+        return self._effect_id_map.get(effect_id)
+
+    def get_effect(self, name, strict=True):
+        if strict:
+            return next((c for c in self.get_effects() if c.name == name), None)
+        else:
+            return next((c for c in self.get_effects() if name.lower() in c.name.lower()), None)
+
+    async def select_effect(self, name):
+        """
+        Opens a prompt for a user to select the effect they were searching for.
+
+        :rtype: Effect
+        :param name: The name of the effect to search for.
+        :return: The selected Effect, or None if the search failed.
+        """
+        return await search_and_select(self.ctx, self.get_effects(), name, lambda e: e.name)
+
+    def remove_effect(self, effect):
+        try:
+            self._effects.remove(effect)
+        except ValueError:
+            # this should be safe
+            # the only case where this occurs is if a parent removes an effect while it's trying to remove itself
+            pass
+        # invalidate cache
+        self._invalidate_effect_cache()
+
+    def remove_all_effects(self, _filter=None):
+        if _filter is None:
+            to_remove = self._effects.copy()
+        else:
+            to_remove = list(filter(_filter, self._effects))
+        for e in to_remove:
+            e.remove()
+        return to_remove
+
+    def active_effects(self, key=None):
+        if "parsed_effects" not in self._cache:
+            parsed_effects = {}
+            for effect in self.get_effects():
+                for k, v in effect.effect.items():
+                    if k not in parsed_effects:
+                        parsed_effects[k] = []
+                    if not isinstance(v, list):
+                        parsed_effects[k].append(v)
+                    else:
+                        parsed_effects[k].extend(v)
+            self._cache["parsed_effects"] = parsed_effects
+        if key:
+            return self._cache["parsed_effects"].get(key, [])
+        return self._cache["parsed_effects"]
+
+    def _invalidate_effect_cache(self):
+        if "parsed_effects" in self._cache:
+            del self._cache["parsed_effects"]
+        if "attacks" in self._cache:
+            del self._cache["attacks"]
+
+    def is_concentrating(self):
+        return any(e.concentration for e in self.get_effects())
+
+    # controller stuff
+    def controller_mention(self):
+        return f"<@{self.controller}>"
+
+    async def message_controller(self, ctx, *args, **kwargs):
+        """Sends a message to the explorer's controller."""
+        if ctx.guild is None:
+            raise RequiresContext("message_controller requires a guild context.")
+        if int(self.controller) == ctx.bot.user.id:  # don't message self
+            return
+        member = await get_guild_member(ctx.guild, int(self.controller))
+        if member is None:  # member is not in the guild, oh well
+            return
+        try:
+            await member.send(*args, **kwargs)
+        except discord.Forbidden:  # member is not accepting PMs from us, oh well
+            pass
+
+    # hooks
+    def on_round(self, num_rounds=1):
+        """
+        A method called at the start of the round
+        :param num_rounds: The number of rounds that just passed.
+        :return: None
+        """
+        for e in self.get_effects().copy():
+            e.on_round(num_rounds)
+
+    def on_round_end(self, num_rounds=1):
+        """A method called at the end of the round"""
+        for e in self.get_effects().copy():
+            e.on_round_end(num_rounds)
+
+    def on_remove(self):
+        """
+        Called when the explorer is removed from exploration, either through !i remove or the exploration ending.
+        """
+        pass
+
+    # stringification
+    def get_summary(self, private=False, no_notes=False):
+        """
+        Gets a short summary of an explorer's status.
+        :return: A string describing the explorer.
+        """
+        hp_str = f"{self.hp_str(private)} " if self.hp_str(private) else ""
+        if not no_notes:
+            return f"{self.name} {hp_str}{self._get_effects_and_notes()}"
+        else:
+            return f"{self.name} {hp_str}"
+
+    def get_status(self, private=False):
+        """
+        Gets the start-of-turn status of an explorer.
+        :param private: Whether to return the full revealed stats or not.
+        :return: A string describing the explorer.
+        """
+        name = self.name
+        hp_ac = self._get_hp_and_ac(private)
+        resists = self._get_resist_string(private)
+        notes = "\n# " + self.notes if self.notes else ""
+        effects = self._get_long_effects()
+        return f"{name} {hp_ac} {resists}{notes}\n{effects}".strip()
+
+    def _get_long_effects(self):
+        return "\n".join(f"* {str(e)}" for e in self.get_effects())
+
+    def _get_effects_and_notes(self):
+        out = []
+        if (self._ac is not None or self.ac) and not self.is_private:
+            out.append(f"AC {self.ac}")
+        for e in self.get_effects():
+            out.append(e.get_short_str())
+        if self.notes:
+            out.append(self.notes)
+        if out:
+            return f"({', '.join(out)})"
+        return ""
+
+    def _get_hp_and_ac(self, private: bool = False):
+        out = [self.hp_str(private)]
+        if (self._ac is not None or self.ac) and (not self.is_private or private):
+            out.append(f"(AC {self.ac})")
+        return " ".join(out)
+
+    def _get_resist_string(self, private: bool = False):
+        resist_str = ""
+        if not self.is_private or private:
+            if len(self.resistances.resist) > 0:
+                resist_str += "\n> Resistances: " + ", ".join([str(r) for r in self.resistances.resist])
+            if len(self.resistances.immune) > 0:
+                resist_str += "\n> Immunities: " + ", ".join([str(r) for r in self.resistances.immune])
+            if len(self.resistances.vuln) > 0:
+                resist_str += "\n> Vulnerabilities: " + ", ".join([str(r) for r in self.resistances.vuln])
+            if len(self.resistances.neutral) > 0:
+                resist_str += "\n> Ignored: " + ", ".join([str(r) for r in self.resistances.neutral])
+        return resist_str
+
+    def __str__(self):
+        return f"{self.name}: {self.hp_str()}".strip()
+
+    def __hash__(self):
+        return hash(f"{self.exploration.channel}.{self.name}")
+
 
 class PlayerExplorer(Explorer):
     type = ExplorerType.PLAYER
@@ -127,8 +469,6 @@ class PlayerExplorer(Explorer):
         name: str,
         controller_id: str,
         private: bool,
-        init: int,
-        index: int = None,
         notes: str = None,
         effects: list = None,
         group_id: str = None,
@@ -151,8 +491,6 @@ class PlayerExplorer(Explorer):
             name,
             controller_id,
             private,
-            init,
-            index,
             notes,
             effects,
             group_id,
@@ -167,7 +505,7 @@ class PlayerExplorer(Explorer):
         self._character = None  # cache
 
     @classmethod
-    async def from_character(cls, character, ctx, exploration, controller_id, init, private):
+    async def from_character(cls, character, ctx, exploration, controller_id, private):
         id = create_explorer_id()
         inst = cls(
             ctx,
@@ -176,7 +514,6 @@ class PlayerExplorer(Explorer):
             character.name,
             controller_id,
             private,
-            init,
             # statblock copies
             resistances=character.resistances.copy(),
             # character specific
@@ -238,10 +575,6 @@ class PlayerExplorer(Explorer):
     @property
     def character(self):
         return self._character
-
-    @property
-    def init_skill(self):
-        return self.character.skills.initiative
 
     @property
     def stats(self):

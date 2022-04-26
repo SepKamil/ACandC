@@ -33,6 +33,9 @@ import disnake
 from disnake.ext import commands
 from disnake.ext.commands import NoPrivateMessage
 
+from .group import ExplorerGroup
+from ..models.sheet.resistance import Resistances
+
 
 class ExplorationTracker(commands.Cog):
 
@@ -58,7 +61,7 @@ class ExplorationTracker(commands.Cog):
         """Begins exploration in the channel the command is invoked.
         Usage: !explore begin <ARGS (opt)>
         __Valid Argument__
-        -name <name> - Sets a name for the combat instance."""
+        -name <name> - Sets a name for the exploration instance."""
         await Explore.ensure_unique_chan(ctx)
 
         guild_settings = await ctx.get_server_settings()
@@ -86,18 +89,23 @@ class ExplorationTracker(commands.Cog):
     async def add(self, ctx, modifier: int, name: str, *args):
         """Adds a generic explorer to the initiative order.
         If a character is set up with the SheetManager module, you can use !explore join instead.
-        If you are adding monsters to combat, you can use !init madd instead.
 
         __Valid Arguments__
+        `-h` - Hides HP, AC, resistances, and attack list.
         `-controller <controller>` - Pings a different person on turn.
-        `-group <group>` - Adds the combatant to a group.
-        `-note <note>` - Sets the combatant's note.
+        `-group <group>` - Adds the explorer to a group.
+        `-note <note>` - Sets the explorer's note.
         """
 
+        private = False
         controller = str(ctx.author.id)
         group = None
+        resists = {}
 
         args = argparse(args)
+
+        if args.last("h", type_=bool):
+            private = True
 
         if args.last("controller"):
             controller_name = args.last("controller")
@@ -115,7 +123,7 @@ class ExplorationTracker(commands.Cog):
             return
 
         me = Explorer.new(
-            name, controller, ctx, exploration
+            name, controller, private, Resistances.from_dict(resists), ctx, exploration
         )
 
         # -note (#1211)
@@ -135,12 +143,12 @@ class ExplorationTracker(commands.Cog):
     @explore.command(name="join", aliases=["cadd", "dcadd"])
     async def join(self, ctx, *, args: str = ""):
         """
-        Adds the current active character to combat. A character must be loaded through the SheetManager module first.
+        Adds the current active character to exploration. A character must be loaded through the SheetManager module first.
         __Valid Arguments__
         `-phrase <phrase>` - Adds flavor text.
         `-thumb <thumbnail URL>` - Adds flavor image.
-        `-group <group>` - Adds the combatant to a group.
-        `-note <note>` - Sets the combatant's note.
+        `-group <group>` - Adds the explorer to a group.
+        `-note <note>` - Sets the explorer's note.
         [user snippet]
         """
         char: Character = await ctx.get_character()
@@ -172,10 +180,10 @@ class ExplorationTracker(commands.Cog):
 
         if group is None:
             exploration.add_explorer(me)
-            embed.set_footer(text="Added to combat!")
+            embed.set_footer(text="Added to exploration!")
         else:
             grp = exploration.get_group(group)
-            grp.add_combatant(me)
+            grp.add_explorer(me)
             embed.set_footer(text=f"Joined group {grp.name}!")
 
         await exploration.final()
@@ -230,9 +238,10 @@ class ExplorationTracker(commands.Cog):
     @explore.command(aliases=["opts"])
     async def opt(self, ctx, name: str, *args):
         """
-        Edits the options of a combatant.
+        Edits the options of a explorer.
         __Valid Arguments__
-        `-name <name>` - Changes the combatants' name.
+        `-h` - Hides HP, AC, Resists, etc.
+        `-name <name>` - Changes the explorer's name.
         `-controller <controller>` - Pings a different person on turn.
         """  # noqa: E501
         exploration = await ctx.get_exploration()
@@ -244,6 +253,7 @@ class ExplorationTracker(commands.Cog):
 
         args = argparse(args)
         options = {}
+        target_is_group = isinstance(expl, ExplorerGroup)
         run_once = set()
         allowed_mentions = set()
 
@@ -251,7 +261,7 @@ class ExplorationTracker(commands.Cog):
             """
             Wrapper to register an option.
             :param str opt_name: The string to register the function under. Defaults to function name.
-            :param bool pass_group: Whether to pass a group as the first argument to the function or a combatant.
+            :param bool pass_group: Whether to pass a group as the first argument to the function or an explorer.
             :param kwargs: kwargs that will always be passed to the function.
             """
 
@@ -265,7 +275,7 @@ class ExplorationTracker(commands.Cog):
                         if func_name in run_once:
                             return
                         run_once.add(func_name)
-                        return await old_func(expl, *a, **k)  # pop the combatant argument and sub in group
+                        return await old_func(expl, *a, **k)  # pop the explorer argument and sub in group
 
                 func = options[func_name] = functools.partial(func, **kwargs)
                 return func
@@ -285,7 +295,7 @@ class ExplorationTracker(commands.Cog):
             if member is None:
                 return "\u274c New controller not found."
             if member.bot:
-                return "\u274c Bots cannot control combatants."
+                return "\u274c Bots cannot control explorers."
             allowed_mentions.add(member)
             explorer.controller = str(member.id)
             return f"\u2705 {explorer.name}'s controller set to {explorer.controller_mention()}."
@@ -295,7 +305,7 @@ class ExplorationTracker(commands.Cog):
             old_name = explorer.name
             new_name = args.last("name")
             if exploration.get_explorer(new_name, True) is not None:
-                return f"\u274c There is already another combatant with the name {new_name}."
+                return f"\u274c There is already another explorer with the name {new_name}."
             elif new_name:
                 explorer.name = new_name
                 return f"\u2705 {old_name}'s name set to {new_name}."
