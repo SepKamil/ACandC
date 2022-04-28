@@ -96,6 +96,7 @@ class Explorer(BaseExplorer, StatBlock):
             id,
             name,
             controller_id,
+            private,
             levels=levels,
             skills=skills
         )
@@ -116,6 +117,7 @@ class Explorer(BaseExplorer, StatBlock):
         d.update(
             {
                 "controller_id": self.controller,
+                "private": self.private,
                 "notes": self.notes,
                 "effects": [e.to_dict() for e in self._effects],
                 "group_id": self._group_id,

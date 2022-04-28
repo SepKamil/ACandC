@@ -11,7 +11,7 @@ from typing import Any, List, Optional, TYPE_CHECKING
 from aliasing import helpers
 from cogs5e.exploration.explore import Explore
 from cogs5e.models.character import Character
-from cogs5e.models.errors import NoSelectionElements
+from cogs5e.models.errors import NoSelectionElements, InvalidArgument
 from cogs5e.utils import actionutils, checkutils, targetutils
 from cogs5e.utils.help_constants import *
 from cogsmisc.stats import Stats
@@ -38,6 +38,14 @@ from ..models.sheet.resistance import Resistances
 
 
 class ExplorationTracker(commands.Cog):
+    """
+    Exploration tracking commands. Use !help explore for more details.
+    To use, first start exploration in a channel by saying "!explore begin".
+    Then, each explorer should add themselves to the combat with "!explore add <NAME>".
+    Then, you can advance exploration with "!explore adv".
+    Once exploration ends, end exploration with "!explore end".
+    For more help, the !help command shows applicable arguments for each command.
+    """
 
     def __init__(self, bot):
         self.bot = bot
@@ -64,8 +72,6 @@ class ExplorationTracker(commands.Cog):
         -name <name> - Sets a name for the exploration instance."""
         await Explore.ensure_unique_chan(ctx)
 
-        guild_settings = await ctx.get_server_settings()
-
         options = {}
         args = argparse(args)
         if "name" in args:
@@ -86,8 +92,8 @@ class ExplorationTracker(commands.Cog):
         await ctx.send(out)
 
     @explore.command()
-    async def add(self, ctx, modifier: int, name: str, *args):
-        """Adds a generic explorer to the initiative order.
+    async def add(self, ctx, name: str, *args):
+        """Adds a generic explorer to the exploration.
         If a character is set up with the SheetManager module, you can use !explore join instead.
 
         __Valid Arguments__
@@ -190,19 +196,31 @@ class ExplorationTracker(commands.Cog):
         await ctx.send(embed=embed)
 
     @explore.command(name="advance", aliases=["adv", "a"])
-    async def advance(self, ctx, numrounds: int = 1):
-        """Skips one or more rounds of initiative."""
+    async def advance(self, ctx, numrounds: int = 1, time: str = "R"):
+        """
+        Advances exploration one or more rounds.
+        Usage: !explore advance <number> <R/M/H>
+        R ensures exploration will be advanced by rounds
+        M ensures exploration will be advanced by minutes (tens of rounds)
+        H ensures exploration will be advanced by hours (600s of rounds)
+        By default it advances rounds.
+        If no number is entered, exploration will advance 1 round
+        """
         exploration = await ctx.get_exploration()
+
+        if time.upper() in ['R', 'RD', 'RDS', 'ROUNDS']:
+            numrounds = numrounds
+        elif time.upper() in ['M', 'MI', 'MIN', 'MINS', 'MINUTES']:
+            numrounds = numrounds * 10
+        elif time.upper() in ['H', 'HR', 'HOURS']:
+            numrounds = numrounds * 10 * 60
 
         messages = exploration.skip_rounds(numrounds)
         out = messages
 
-        if (turn_str := exploration.get_turn_str()) is not None:
-            out.append(turn_str)
-        else:
-            out.append(exploration.get_summary())
+        out.append(exploration.get_summary())
 
-        await ctx.send("\n".join(out), allowed_mentions=exploration.get_turn_str_mentions())
+        await ctx.send("\n".join(out))
         await exploration.final()
 
     @explore.command(name="list", aliases=["summary"])
@@ -300,6 +318,14 @@ class ExplorationTracker(commands.Cog):
             explorer.controller = str(member.id)
             return f"\u2705 {explorer.name}'s controller set to {explorer.controller_mention()}."
 
+        @option()
+        async def group(explorer):
+            group_name = args.last("group")
+            new_group = explorer.set_group(group_name=group_name)
+            if new_group is None:
+                return f"\u2705 {explorer.name} removed from all groups."
+            return f"\u2705 {explorer.name} added to group {new_group.name}."
+
         @option(pass_group=True)
         async def name(explorer):
             old_name = explorer.name
@@ -335,3 +361,158 @@ class ExplorationTracker(commands.Cog):
             await exploration.final()
         else:
             await ctx.send("No valid options found.")
+
+    @explore.command()
+    async def status(self, ctx, name: str = "", *, args: str = ""):
+        """Gets the status of an explorer or group.
+        Name must be specified in order to work
+        __Valid Arguments__
+        `private` - PMs the controller of the explorer a more detailed status."""
+
+        exploration = await ctx.get_exploration()
+
+        if name == "private" or name == "":
+            await ctx.send("Name not provided.")
+            return
+        else:
+            explorer = await exploration.select_explorer(name, select_group=True)
+
+        if explorer is None:
+            await ctx.send("Explorer or group not found.")
+            return
+
+        private = "private" in args.lower() or name == "private"
+        if not isinstance(explorer, ExplorerGroup):
+            private = private and str(ctx.author.id) == explorer.controller
+            status = explorer.get_status(private=private)
+        else:
+            status = "\n".join(
+                [
+                    ex.get_status(private=private and str(ctx.author.id) == ex.controller)
+                    for ex in explorer.get_explorers()
+                ]
+            )
+
+        if private:
+            await explorer.message_controller(ctx, f"```markdown\n{status}```")
+        else:
+            await ctx.send("```markdown\n" + status + "```")
+
+    @explore.command()
+    async def effect(self, ctx, target_name: str, effect_name: str, *args):
+        """
+        Attaches a status effect to an explorer.
+        [args] is a set of args that affects an explorer during an exploration.
+        See `!help explore re` to remove effects.
+        __**Valid Arguments**__
+        `-dur <duration>` - Sets the duration of the effect, in rounds.
+        `conc` - Makes the effect require concentration. Will end any other concentration effects.
+        `end` - Makes the effect duration tick on the end of turn, rather than the beginning.
+        `-t <target>` - Specifies more explorers to target, chainable (e.g., "-t or1 -t or2").
+        `-parent <"[explorer]|[effect]">` - Sets a parent effect from a specified explorer.
+        `-desc <description>` - Adds a description of the effect.
+        """  # noqa: E501
+        exploration = await ctx.get_exploration()
+        args = argparse(args)
+
+        targets = []
+
+        for i, t in enumerate([target_name] + args.get("t")):
+            target = await exploration.select_explorer(t, f"Select target #{i + 1}.", select_group=True)
+            if isinstance(target, ExplorerGroup):
+                targets.extend(target.get_explorers())
+            else:
+                targets.append(target)
+
+        duration = args.last("dur", -1, int)
+        conc = args.last("conc", False, bool)
+        end = args.last("end", False, bool)
+        parent = args.last("parent")
+        desc = args.last("desc")
+
+        if parent is not None:
+            parent = parent.split("|", 1)
+            if not len(parent) == 2:
+                raise InvalidArgument("`parent` arg must be formatted `EXPLORER|EFFECT_NAME`")
+            p_explorer = await exploration.select_explorer(
+                parent[0], choice_message="Select the explorer with the parented effect."
+            )
+            parent = await p_explorer.select_effect(parent[1])
+
+        embed = EmbedWithAuthor(ctx)
+        for explorer in targets:
+            if effect_name.lower() in (e.name.lower() for e in explorer.get_effects()):
+                out = "Effect already exists."
+            else:
+                effect_obj = Effect.new(
+                    exploration,
+                    explorer,
+                    duration=duration,
+                    name=effect_name,
+                    effect_args=args,
+                    concentration=conc,
+                    tick_on_end=end,
+                    desc=desc,
+                )
+                result = explorer.add_effect(effect_obj)
+                if parent:
+                    effect_obj.set_parent(parent)
+                out = f"Added effect {effect_name} to {explorer.name}."
+                if result["conc_conflict"]:
+                    conflicts = [e.name for e in result["conc_conflict"]]
+                    out += f"\nRemoved {', '.join(conflicts)} due to concentration conflict!"
+            embed.add_field(name=explorer.name, value=out)
+        await ctx.send(embed=embed)
+        await exploration.final()
+
+    @explore.command(name="re")
+    async def remove_effect(self, ctx, name: str, effect: str = None):
+        """Removes a status effect from an explorer or group. Removes all if effect is not passed."""
+        exploration = await ctx.get_exploration()
+
+        targets = []
+
+        target = await exploration.select_explorer(name, select_group=True)
+        if isinstance(target, ExplorerGroup):
+            targets.extend(target.get_explorers())
+        else:
+            targets.append(target)
+
+        out = ""
+
+        for explorer in targets:
+            if effect is None:
+                explorer.remove_all_effects()
+                out += f"All effects removed from {explorer.name}.\n"
+            else:
+                to_remove = await explorer.select_effect(effect)
+                children_removed = ""
+                if to_remove.children:
+                    children_removed = f"Also removed {len(to_remove.children)} child effects.\n"
+                to_remove.remove()
+                out += f"Effect {to_remove.name} removed from {explorer.name}.\n{children_removed}"
+        await ctx.send(out)
+        await exploration.final()
+
+    @explore.command()
+    async def end(self, ctx, args=None):
+        """Ends exploration in the channel."""
+
+        to_end = await confirm(ctx, "Are you sure you want to end exploration? (Reply with yes/no)", True)
+
+        if to_end is None:
+            return await ctx.send("Timed out waiting for a response or invalid response.", delete_after=10)
+        elif not to_end:
+            return await ctx.send("OK, cancelling.", delete_after=10)
+
+        msg = await ctx.send("OK, ending...")
+        exploration = await ctx.get_exploration()
+
+        with suppress(disnake.HTTPException):
+            await ctx.author.send(f"End of exploration report: {exploration.round_num} rounds " f"{exploration.get_summary(True)}")
+            summary = exploration.get_summary_msg()
+            await summary.edit(content=exploration.get_summary() + " ```-----EXPLORATION ENDED-----```")
+            await summary.unpin()
+
+        await exploration.end()
+        await msg.edit(content="Exploration ended.")

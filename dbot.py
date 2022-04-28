@@ -38,6 +38,7 @@ COGS = (
     "cogs5e.pbpUtils",
     "cogs5e.gametrack",
     "cogs5e.initiative",
+    "cogs5e.exploration",
     "cogs5e.sheetManager",
     "cogs5e.gamelog",
     "cogsmisc.customization",

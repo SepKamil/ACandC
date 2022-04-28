@@ -12,7 +12,6 @@ from .group import ExplorerGroup
 from .errors import *
 
 
-
 class Explore:
     # cache exploration for 10 seconds to avoid race conditions
     # this makes sure that multiple calls to Explore.from_ctx() in the same invocation or two simultaneous ones
@@ -31,6 +30,8 @@ class Explore:
         explorers: List[Explorer] = None,
         round_num: int = 0,
     ):
+        if explorers is None:
+            explorers = []
         self._channel = str(channel_id)  # readonly
         self._summary = int(message_id)  # readonly
         self._dm = str(dm_id)
@@ -72,8 +73,8 @@ class Explore:
             [],
             raw["round"],
         )
-        for c in raw["explorers"]:
-            inst._explorers.append(await deserialize_explorer(c, ctx, inst))
+        for e in raw["explorers"]:
+            inst._explorers.append(await deserialize_explorer(e, ctx, inst))
         return inst
 
     # sync deser/ser
@@ -83,7 +84,7 @@ class Explore:
         try:
             return cls._cache[channel_id]
         except KeyError:
-            raw = ctx.bot.mdb.combats.delegate.find_one({"channel": channel_id})
+            raw = ctx.bot.mdb.explorations.delegate.find_one({"channel": channel_id})
             if raw is None:
                 raise ExplorationNotFound
             # write to cache
@@ -172,13 +173,13 @@ class Explore:
         :return: A list of all explorers (and optionally groups).
         """
         explorers = []
-        for c in self._explorers:
-            if not isinstance(c, ExplorerGroup):
-                explorers.append(c)
+        for e in self._explorers:
+            if not isinstance(e, ExplorerGroup):
+                explorers.append(e)
             else:
-                explorers.extend(c.get_explorers())
+                explorers.extend(e.get_explorers())
                 if groups:
-                    explorers.append(c)
+                    explorers.append(e)
         return explorers
 
     def get_groups(self):
@@ -237,13 +238,12 @@ class Explore:
             explorer = next((c for c in self.get_explorers() if name.lower() in c.name.lower()), None)
         return explorer
 
-    def get_group(self, name, create=None, strict=None):
+    def get_group(self, name, strict=None):
         """
         Gets an explorer group by its name or ID.
 
         :rtype: ExplorerGroup
         :param name: The name of the explorer group.
-        :param create: The initiative to create a group at if a group is not found.
         :param strict: Whether explorer name must be a full case insensitive match.
             If this is ``None`` (default), attempts a strict match with fallback to partial match.
             If this is ``False``, it returns the first partial match.
@@ -258,10 +258,6 @@ class Explore:
             grp = next((g for g in self.get_groups() if g.name.lower() == name.lower()), None)
         if not grp and not strict:
             grp = next((g for g in self.get_groups() if name.lower() in g.name.lower()), None)
-
-        if grp is None and create is not None:
-            grp = ExplorerGroup.new(self, name, init=create, ctx=self.ctx)
-            self.add_explorer(grp)
 
         return grp
 
@@ -315,7 +311,7 @@ class Explore:
     def get_summary(self, private=False):
         """Returns the generated summary message (pinned) content."""
         explorers = self._explorers
-        name = self.options.get("name") if self.options.get("name") else "Current initiative"
+        name = self.options.get("name") if self.options.get("name") else "Exploration"
 
         out = f"```md\n{name} (round {self.round_num})\n"
         out += f"{'=' * (len(out) - 7)}\n"
