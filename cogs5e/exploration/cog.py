@@ -97,21 +97,22 @@ class ExplorationTracker(commands.Cog):
         If a character is set up with the SheetManager module, you can use !explore join instead.
 
         __Valid Arguments__
-        `-h` - Hides HP, AC, resistances, and attack list.
+        `-u` - Unhides HP, AC, resistances
         `-controller <controller>` - Pings a different person on turn.
         `-group <group>` - Adds the explorer to a group.
         `-note <note>` - Sets the explorer's note.
         """
 
-        private = False
+        private = True
         controller = str(ctx.author.id)
         group = None
+        hp = None
+        ac = None
         resists = {}
-
         args = argparse(args)
 
-        if args.last("h", type_=bool):
-            private = True
+        if args.last("u", type_=bool):
+            private = False
 
         if args.last("controller"):
             controller_name = args.last("controller")
@@ -119,6 +120,12 @@ class ExplorationTracker(commands.Cog):
             controller = str(member.id) if member is not None and not member.bot else controller
         if args.last("group"):
             group = args.last("group")
+        if args.last("hp"):
+            hp = args.last("hp", type_=int)
+            if hp < 1:
+                return await ctx.send("You must pass in a positive, nonzero HP with the -hp tag.")
+        if args.last("ac"):
+            ac = args.last("ac", type_=int)
 
         note = args.last("note")
 
@@ -129,7 +136,7 @@ class ExplorationTracker(commands.Cog):
             return
 
         me = Explorer.new(
-            name, controller, private, Resistances.from_dict(resists), ctx, exploration
+            name, controller, hp, ac, private, Resistances.from_dict(resists), ctx, exploration
         )
 
         # -note (#1211)
@@ -399,6 +406,59 @@ class ExplorationTracker(commands.Cog):
             await ctx.send("```markdown\n" + status + "```")
 
     @explore.command()
+    async def light(self, ctx, effect_name: str, target_name: str):
+        """
+        Attaches torch or lantern as an effect to a target explorer
+        Usage: !explore light <torch/lantern> <explorer's name>
+        See `!help explore re` to remove effects.
+        """  # noqa: E501
+        exploration = await ctx.get_exploration()
+
+        targets = []
+        desc = ""
+        duration = -1
+
+        for i, t in enumerate([target_name]):
+            target = await exploration.select_explorer(t, f"Select target #{i + 1}.", select_group=True)
+            if isinstance(target, ExplorerGroup):
+                targets.extend(target.get_explorers())
+            else:
+                targets.append(target)
+
+        if effect_name in ["torch", "Torch"]:
+            desc = "20 ft radius bright light + 20 ft radius dim light"
+            duration = 600
+
+        if effect_name in ["Lantern", "lantern"]:
+            desc = "30 ft radius bright light + 30 ft radius dim light"
+            duration = 600
+
+        embed = EmbedWithAuthor(ctx)
+
+        for explorer in targets:
+            if effect_name.lower() in (e.name.lower() for e in explorer.get_effects()):
+                out = "Effect already exists."
+            else:
+                effect_obj = Effect.new(
+                    exploration,
+                    explorer,
+                    duration=duration,
+                    name=effect_name,
+                    effect_args=[],
+                    concentration=False,
+                    tick_on_end=False,
+                    desc=desc,
+                )
+                result = explorer.add_effect(effect_obj)
+                if effect_name in ["torch", "Torch", "Lantern", "lantern"]:
+                    out = f"{explorer.name} lit a {effect_name}."
+                else:
+                    out = f"Added effect {effect_name} to {explorer.name}."
+            embed.add_field(name=explorer.name, value=out)
+        await ctx.send(embed=embed)
+        await exploration.final()
+
+    @explore.command()
     async def effect(self, ctx, target_name: str, effect_name: str, *args):
         """
         Attaches a status effect to an explorer.
@@ -430,6 +490,14 @@ class ExplorationTracker(commands.Cog):
         parent = args.last("parent")
         desc = args.last("desc")
 
+        if desc is None and duration == -1 and effect_name in ["Light", "light", "torch", "Torch"]:
+            desc = "20 ft radius bright light + 20 ft radius dim light"
+            duration = 600
+
+        if desc is None and duration == -1 and effect_name in ["Lantern", "lantern"]:
+            desc = "30 ft radius bright light + 30 ft radius dim light"
+            duration = 600
+
         if parent is not None:
             parent = parent.split("|", 1)
             if not len(parent) == 2:
@@ -440,6 +508,7 @@ class ExplorationTracker(commands.Cog):
             parent = await p_explorer.select_effect(parent[1])
 
         embed = EmbedWithAuthor(ctx)
+
         for explorer in targets:
             if effect_name.lower() in (e.name.lower() for e in explorer.get_effects()):
                 out = "Effect already exists."
@@ -457,7 +526,10 @@ class ExplorationTracker(commands.Cog):
                 result = explorer.add_effect(effect_obj)
                 if parent:
                     effect_obj.set_parent(parent)
-                out = f"Added effect {effect_name} to {explorer.name}."
+                if effect_name in ["torch", "Torch", "Lantern", "lantern"]:
+                    out = f"{explorer.name} lit a {effect_name}."
+                else:
+                    out = f"Added effect {effect_name} to {explorer.name}."
                 if result["conc_conflict"]:
                     conflicts = [e.name for e in result["conc_conflict"]]
                     out += f"\nRemoved {', '.join(conflicts)} due to concentration conflict!"

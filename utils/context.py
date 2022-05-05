@@ -58,7 +58,7 @@ class AvraeContext(Context):
 
     async def get_exploration(self):
         """
-        Gets the combat exploration in this context.
+        Gets the exploration active in this context.
 
         :raises ExplorationNotFound: If the context has no combat (author has none active).
         :rtype: Explore

@@ -11,6 +11,8 @@ from .types import ExplorerType
 from .utils import create_effect_id
 
 # exploration types are only defined when type checking
+from ..models.embeds import EmbedWithColor
+
 _ExploreT = Any
 _ExplorerT = Any
 if TYPE_CHECKING:
@@ -186,15 +188,12 @@ class Effect:
         remaining = self.remaining if self.remaining >= 0 else float("inf")
         if self.explorer is None or self.exploration is None:
             return remaining, 0, 0, 1 if self.ticks_on_end else 0
-        index = self.explorer.index
-        has_ticked_this_round = self.exploration.index is not None and (
-            (self.exploration.index == index and not self.ticks_on_end) or self.exploration.index > index
-        )
-        return remaining, int(has_ticked_this_round), index, 1 if self.ticks_on_end else 0
+        has_ticked_this_round = 1
+        return remaining, int(has_ticked_this_round), 0, 1 if self.ticks_on_end else 0
 
     def _duration_str(self):
         """Gets a string describing this effect's duration."""
-        # find minumum duration in parent hierarchy
+        # find minimum duration in parent hierarchy
         min_duration = self._duration_cmp()
         parent = self.get_parent_effect()
         seen_parents = {self.id}
@@ -207,18 +206,6 @@ class Effect:
         remaining, _, index, ticks_on_end = min_duration
         if math.isinf(remaining):
             return ""
-        elif 0 <= remaining <= 1:  # effect ends on next tick
-            if self.explorer is None or self.exploration is None or index == self.explorer.index:  # our turn
-                if ticks_on_end:
-                    return "[until end of turn]"
-                else:
-                    return "[until start of next turn]"
-            else:  # another explorer's turn
-                explorer = self.exploration.explorers[index]
-                if ticks_on_end:
-                    return f"[until end of {explorer.name}'s turn]"
-                else:
-                    return f"[until start of {explorer.name}'s next turn]"
         elif remaining > 5_256_000:  # years
             divisor, unit = 5256000, "year"
         elif remaining > 438_000:  # months
@@ -273,6 +260,7 @@ class Effect:
         """
         Reduces the round counter if applicable, and removes itself if at 0.
         """
+
         if self.remaining >= 0 and self.ticks_on_end:
             if self.remaining - num_rounds <= 0:
                 self.remove()

@@ -7,7 +7,6 @@ from cogs5e.models.sheet.base import BaseStats, Levels, Saves, Skill, Skills
 from cogs5e.models.sheet.resistance import Resistance, Resistances
 from cogs5e.models.sheet.spellcasting import Spellbook
 from cogs5e.models.sheet.statblock import DESERIALIZE_MAP, StatBlock
-from gamedata.monster import MonsterCastableSpellbook
 from utils.constants import RESIST_TYPES
 from utils.functions import combine_maybe_mods, get_guild_member, search_and_select
 from .effect import Effect
@@ -81,6 +80,8 @@ class Explorer(BaseExplorer, StatBlock):
         cls,
         name: str,
         controller_id: str,
+        max_hp: int,
+        ac: int,
         private: bool,
         resists: Resistances,
         ctx,
@@ -98,7 +99,10 @@ class Explorer(BaseExplorer, StatBlock):
             controller_id,
             private,
             levels=levels,
-            skills=skills
+            resistances=resists,
+            skills=skills,
+            max_hp=max_hp,
+            ac=ac,
         )
 
     @classmethod
@@ -117,7 +121,7 @@ class Explorer(BaseExplorer, StatBlock):
         d.update(
             {
                 "controller_id": self.controller,
-                "private": self.private,
+                "private": self.is_private,
                 "notes": self.notes,
                 "effects": [e.to_dict() for e in self._effects],
                 "group_id": self._group_id,

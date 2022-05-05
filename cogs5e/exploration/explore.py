@@ -1,4 +1,5 @@
 import asyncio
+import math
 
 import discord
 import disnake.ext.commands
@@ -293,8 +294,8 @@ class Explore:
 
         self._round += num_rounds
         for exp in self.get_explorers():
-            exp.on_turn(num_rounds)
-            exp.on_turn_end(num_rounds)
+            exp.on_round(num_rounds)
+            exp.on_round_end(num_rounds)
 
         return messages
 
@@ -312,8 +313,9 @@ class Explore:
         """Returns the generated summary message (pinned) content."""
         explorers = self._explorers
         name = self.options.get("name") if self.options.get("name") else "Exploration"
+        duration = self.duration_str(self.round_num)
 
-        out = f"```md\n{name} (round {self.round_num})\n"
+        out = f"```md\n{name} ({duration})\n"
         out += f"{'=' * (len(out) - 7)}\n"
 
         explorer_strs = []
@@ -351,6 +353,30 @@ class Explore:
         if await ctx.bot.mdb.explorations.find_one({"channel": str(ctx.channel.id)}):
             raise ChannelInUse
 
+    @staticmethod
+    def duration_str(round_num):
+        # build string
+        remaining = round_num
+        if math.isinf(remaining):
+            return ""
+        elif remaining > 5_256_000:  # years
+            divisor, unit = 5256000, "year"
+        elif remaining > 438_000:  # months
+            divisor, unit = 438000, "month"
+        elif remaining > 100_800:  # weeks
+            divisor, unit = 100800, "week"
+        elif remaining > 14_400:  # days
+            divisor, unit = 14400, "day"
+        elif remaining > 600:  # hours
+            divisor, unit = 600, "hour"
+        elif remaining > 10:  # minutes
+            divisor, unit = 10, "minute"
+        else:  # rounds
+            divisor, unit = 1, "second"
+
+        rounded = round(remaining / divisor, 1) if divisor > 1 else remaining * 6
+        return f"[{rounded} {unit}s]"
+
     async def update_summary(self):
         """Edits the summary message with the latest summary."""
         await self.get_summary_msg().edit(content=self.get_summary())
@@ -371,7 +397,7 @@ class Explore:
         return discord.PartialMessage(channel=self.get_channel(), id=self.summary)
 
     def __str__(self):
-        return f"Initiative in <#{self.channel}>"
+        return f"Exploration in <#{self.channel}>"
 
 
 async def deserialize_explorer(raw_explorer, ctx, exploration):
