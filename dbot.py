@@ -40,6 +40,7 @@ COGS = (
     "cogs5e.initiative",
     "cogs5e.exploration",
     "cogs5e.sheetManager",
+    "cogs5e.gsheetManager",
     "cogs5e.gamelog",
     "cogsmisc.customization",
     "cogsmisc.core",

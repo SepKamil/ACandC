@@ -1,4 +1,4 @@
-import random
+import logging
 from contextlib import suppress
 import collections
 import functools
@@ -6,19 +6,18 @@ import cachetools
 import d20
 import discord
 from discord.ext import commands
+from discord.ext.commands.cooldowns import BucketType
 
 from typing import Any, List, Optional, TYPE_CHECKING
 from aliasing import helpers
 from cogs5e.exploration.explore import Explore
 from cogs5e.models.character import Character
-from cogs5e.models.errors import NoSelectionElements, InvalidArgument
+from cogs5e.models.errors import NoSelectionElements, InvalidArgument, ExternalImportError
 from cogs5e.utils import actionutils, checkutils, targetutils
 from cogs5e.utils.help_constants import *
-from cogsmisc.stats import Stats
 from cogs5e.models.embeds import EmbedWithAuthor, EmbedWithCharacter, EmbedWithColor
 from gamedata.lookuputils import handle_source_footer, select_monster_full, select_spell_full
 from utils.argparser import argparse
-from utils.constants import SKILL_NAMES
 from utils import checks, constants
 from utils.argparser import argparse
 from utils.functions import confirm, get_guild_member, search_and_select, try_delete
@@ -28,13 +27,16 @@ from cogs5e.dice.cog import Dice
 from cogs5e.dice.utils import string_search_adv
 from cogs5e.exploration.explorer import Explorer, PlayerExplorer
 from cogs5e.exploration.effect import Effect
-from . import utils
+from . import utils, encounter
 import disnake
 from disnake.ext import commands
 from disnake.ext.commands import NoPrivateMessage
 
+from .encounter import Encounter
 from .group import ExplorerGroup
 from ..models.sheet.resistance import Resistances
+
+log = logging.getLogger(__name__)
 
 
 class ExplorationTracker(commands.Cog):
@@ -153,6 +155,20 @@ class ExplorationTracker(commands.Cog):
 
         await exploration.final()
 
+    @explore.command()
+    async def enctimer(self, ctx, nummin: int = 0, time: str = "M"):
+        """Changes the interval between rolling random encounters
+        Usage: !explore enctimer <number> <M/H>
+        M ensures the interval entered is expressed in minutes (tens of rounds)
+        H ensures the interval entered is expressed in hours (600s of rounds)"""
+        if time.upper() in ['M', 'MI', 'MIN', 'MINS', 'MINUTES']:
+            nummin = nummin * 10
+        elif time.upper() in ['H', 'HR', 'HOURS']:
+            nummin = nummin * 10 * 60
+        exploration = await ctx.get_exploration()
+        exploration.set_enc_timer(nummin)
+        await exploration.final()
+
     @explore.command(name="join", aliases=["cadd", "dcadd"])
     async def join(self, ctx, *, args: str = ""):
         """
@@ -222,10 +238,15 @@ class ExplorationTracker(commands.Cog):
         elif time.upper() in ['H', 'HR', 'HOURS']:
             numrounds = numrounds * 10 * 60
 
-        messages = exploration.skip_rounds(numrounds)
-        out = messages
-
-        out.append(exploration.get_summary())
+        messages = await exploration.skip_rounds(ctx, numrounds)
+        if len(messages) > 0:
+            embed = EmbedWithColor()
+            embed.description = "\n".join(messages)
+            await ctx.author.send(embed=embed)
+        out = [exploration.get_summary()]
+        log.warning("Testing")
+        log.warning(exploration.enctimer)
+        log.warning(exploration.encthreshold)
 
         await ctx.send("\n".join(out))
         await exploration.final()
@@ -234,9 +255,9 @@ class ExplorationTracker(commands.Cog):
     async def list(self, ctx, *args):
         """Lists the explorers.
         __Valid Arguments__
-        private - Sends the list in a private message."""
+        -p - Sends the list in a private message."""
         exploration = await ctx.get_exploration()
-        private = "private" in args
+        private = "-p" in args
         destination = ctx if not private else ctx.author
         if private and str(ctx.author.id) == exploration.dm:
             out = exploration.get_summary(True)
@@ -263,7 +284,7 @@ class ExplorationTracker(commands.Cog):
     @explore.command(aliases=["opts"])
     async def opt(self, ctx, name: str, *args):
         """
-        Edits the options of a explorer.
+        Edits the options of an explorer.
         __Valid Arguments__
         `-h` - Hides HP, AC, Resists, etc.
         `-name <name>` - Changes the explorer's name.
@@ -285,13 +306,13 @@ class ExplorationTracker(commands.Cog):
         def option(opt_name=None, pass_group=False, **kwargs):
             """
             Wrapper to register an option.
-            :param str opt_name: The string to register the function under. Defaults to function name.
-            :param bool pass_group: Whether to pass a group as the first argument to the function or an explorer.
-            :param kwargs: kwargs that will always be passed to the function.
+            :param: str opt_name: The string to register the function under. Defaults to function name.
+            :param: bool pass_group: Whether to pass a group as the first argument to the function or an explorer.
+            :param: kwargs: kwargs that will always be passed to the function.
             """
 
             def wrapper(func):
-                target_is_group = False;
+                target_is_group = False
                 func_name = opt_name or func.__name__
                 if pass_group and target_is_group:
                     old_func = func

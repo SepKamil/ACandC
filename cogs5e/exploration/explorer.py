@@ -474,7 +474,7 @@ class PlayerExplorer(Explorer):
         id: str,
         name: str,
         controller_id: str,
-        private: bool,
+        private: bool = True,
         notes: str = None,
         effects: list = None,
         group_id: str = None,
@@ -511,7 +511,7 @@ class PlayerExplorer(Explorer):
         self._character = None  # cache
 
     @classmethod
-    async def from_character(cls, character, ctx, exploration, controller_id, private):
+    async def from_character(cls, character, ctx, exploration, controller_id, private=True):
         id = create_explorer_id()
         inst = cls(
             ctx,

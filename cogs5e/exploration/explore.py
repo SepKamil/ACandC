@@ -1,16 +1,19 @@
 import asyncio
+import logging
 import math
-
 import discord
+
 import disnake.ext.commands
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import List
 import cachetools
 from cogs5e.models.errors import NoCharacter
 from utils.functions import search_and_select
+from .encounter import Encounter
 from .types import ExplorerType
 from .explorer import Explorer, PlayerExplorer
 from .group import ExplorerGroup
 from .errors import *
+log = logging.getLogger(__name__)
 
 
 class Explore:
@@ -30,6 +33,8 @@ class Explore:
         ctx: disnake.ext.commands.Context,
         explorers: List[Explorer] = None,
         round_num: int = 0,
+        enctimer: int = 0,
+        encthreshold: int = 0
     ):
         if explorers is None:
             explorers = []
@@ -40,6 +45,8 @@ class Explore:
         self._explorers = explorers
         self._round = round_num
         self.ctx = ctx
+        self._enctimer = enctimer
+        self._encthreshold = encthreshold
 
     @classmethod
     def new(cls, channel_id, message_id, dm_id, options, ctx):
@@ -73,6 +80,8 @@ class Explore:
             ctx,
             [],
             raw["round"],
+            raw["enctimer"],
+            raw["encthreshold"],
         )
         for e in raw["explorers"]:
             inst._explorers.append(await deserialize_explorer(e, ctx, inst))
@@ -103,6 +112,8 @@ class Explore:
             ctx,
             [],
             raw["round"],
+            raw["enctimer"],
+            raw["encthreshold"],
         )
         for e in raw["explorers"]:
             inst._explorers.append(deserialize_explorer_sync(e, ctx, inst))
@@ -116,6 +127,8 @@ class Explore:
             "options": self.options,
             "explorers": [c.to_dict() for c in self._explorers],
             "round": self.round_num,
+            "enctimer": self.enctimer,
+            "encthreshold": self.encthreshold
         }
 
     # members
@@ -152,6 +165,22 @@ class Explore:
         self._round = value
 
     @property
+    def enctimer(self):
+        return self._enctimer
+
+    @enctimer.setter
+    def enctimer(self, value):
+        self._enctimer = value
+
+    @property
+    def encthreshold(self):
+        return self._encthreshold
+
+    @encthreshold.setter
+    def encthreshold(self, value):
+        self._encthreshold = value
+
+    @property
     def _explorer_id_map(self):
         return {c.id: c for c in self.get_explorers(groups=True)}
 
@@ -170,7 +199,7 @@ class Explore:
         Returns a list of all Explorers in an exploration, regardless of if they are in a group.
         Differs from ._explorers since that won't yield explorers in groups.
 
-        :param groups: Whether to return ExplorerGroup objects in the list.
+        :param: groups: Whether to return ExplorerGroup objects in the list.
         :return: A list of all explorers (and optionally groups).
         """
         explorers = []
@@ -192,9 +221,9 @@ class Explore:
 
     def add_explorer(self, explorer):
         """
-        Adds a explorer to exploration
+        Adds an explorer to exploration
 
-        :type explorer: Explorer
+        :type: explorer: Explorer
         """
         self._explorers.append(explorer)
 
@@ -202,8 +231,8 @@ class Explore:
         """
         Removes an explorer from exploration, and fires the remove hook.
 
-        :type explorer: Explorer
-        :param bool ignore_remove_hook: Whether or not to ignore the remove hook.
+        :type: explorer: Explorer
+        :param: bool ignore_remove_hook: Whether to ignore the remove hook.
         :rtype: Explorer
         """
         if not ignore_remove_hook:
@@ -222,8 +251,8 @@ class Explore:
     def get_explorer(self, name, strict=None):
         """Gets an explorer by their name or ID.
 
-        :param name: The name or id of the explorer.
-        :param strict: Whether explorer name must be a full case insensitive match.
+        :param: name: The name or id of the explorer.
+        :param: strict: Whether explorer name must be a full case-insensitive match.
             If this is ``None`` (default), attempts a strict match with fallback to partial match.
             If this is ``False``, it returns the first partial match.
             If this is ``True``, it will only return a strict match.
@@ -244,8 +273,8 @@ class Explore:
         Gets an explorer group by its name or ID.
 
         :rtype: ExplorerGroup
-        :param name: The name of the explorer group.
-        :param strict: Whether explorer name must be a full case insensitive match.
+        :param: name: The name of the explorer group.
+        :param: strict: Whether explorer name must be a full case-insensitive match.
             If this is ``None`` (default), attempts a strict match with fallback to partial match.
             If this is ``False``, it returns the first partial match.
             If this is ``True``, it will only return a strict match.
@@ -264,20 +293,18 @@ class Explore:
 
     def _check_empty_groups(self):
         """Removes any empty groups in the exploration."""
-        removed = False
         for c in self._explorers:
             if isinstance(c, ExplorerGroup) and len(c.get_explorers()) == 0:
                 self.remove_explorer(c)
-                removed = True
 
     async def select_explorer(self, name, choice_message=None, select_group=False):
         """
         Opens a prompt for a user to select the explorer they were searching for.
 
-        :param choice_message: The message to pass to the selector.
-        :param select_group: Whether to allow groups to be selected.
+        :param: choice_message: The message to pass to the selector.
+        :param: select_group: Whether to allow groups to be selected.
         :rtype: Explorer
-        :param name: The name of the explorer to search for.
+        :param: name: The name of the explorer to search for.
         :return: The selected Explorer, or None if the search failed.
         """
         return await search_and_select(
@@ -289,9 +316,32 @@ class Explore:
             selectkey=lambda c: f"{c.name} {c.hp_str()}",
         )
 
-    def skip_rounds(self, num_rounds):
-        messages = []
+    def set_enc_timer(self, number):
+        self.encthreshold = number
+        self.enctimer = number
 
+    async def skip_rounds(self, ctx, num_rounds):
+        messages = []
+        enc = await ctx.get_encounter()
+        if self._enctimer != 0:
+            div = num_rounds // self._enctimer
+            mod =  num_rounds % self._enctimer
+            log.warning(mod)
+            log.warning(self._enctimer)
+            if div == 0:
+                self._enctimer -= num_rounds
+            else:
+                self._enctimer = self._encthreshold - mod
+                log.warning(self._enctimer)
+                encounter_list = enc.roll_encounters(div)
+                encounter_strs = [f"{div} random encounters rolled:\n"]
+                for enc in encounter_list:
+                    if enc[1] is None:
+                        encounter_strs.append(f"{enc[2]}) {enc[0]}")
+                    else:
+                        encounter_strs.append(f"{enc[2]}) {enc[1]} {enc[0]}")
+                encounter_strs = "\n".join(encounter_strs)
+                messages.append(encounter_strs)
         self._round += num_rounds
         for exp in self.get_explorers():
             exp.on_round(num_rounds)
@@ -400,6 +450,10 @@ class Explore:
         return f"Exploration in <#{self.channel}>"
 
 
+async def deserialize_encounter(raw_encounter):
+    return Encounter.from_dict(raw_encounter)
+
+
 async def deserialize_explorer(raw_explorer, ctx, exploration):
     ctype = ExplorerType(raw_explorer["type"])
     if ctype == ExplorerType.GENERIC:
@@ -408,8 +462,8 @@ async def deserialize_explorer(raw_explorer, ctx, exploration):
         try:
             return await PlayerExplorer.from_dict(raw_explorer, ctx, exploration)
         except NoCharacter:
-            # if the character was deleted, make a best effort to restore what we know
-            # note: PlayerExplorer.from_dict mutates raw_explorer so we don't have to call the normal from_dict
+            # if the character was deleted, make the best effort to restore what we know
+            # note: PlayerExplorer.from_dict mutates raw_explorer, so we don't have to call the normal from_dict
             # operations here (this is hacky)
             return Explorer(ctx, exploration, **raw_explorer)
     elif ctype == ExplorerType.GROUP:
@@ -426,8 +480,8 @@ def deserialize_explorer_sync(raw_explorer, ctx, exploration):
         try:
             return PlayerExplorer.from_dict_sync(raw_explorer, ctx, exploration)
         except NoCharacter:
-            # if the character was deleted, make a best effort to restore what we know
-            # note: PlayerExplorer.from_dict mutates raw_explorer so we don't have to call the normal from_dict
+            # if the character was deleted, make the best effort to restore what we know
+            # note: PlayerExplorer.from_dict mutates raw_explorer, so we don't have to call the normal from_dict
             # operations here (this is hacky)
             return Explorer(ctx, exploration, **raw_explorer)
     elif ctype == ExplorerType.GROUP:

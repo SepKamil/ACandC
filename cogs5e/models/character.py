@@ -288,8 +288,8 @@ class Character(StatBlock):
     # ---------- SCRIPTING ----------
     def evaluate_math(self, varstr):
         """Evaluates a cvar expression in a MathEvaluator.
-        :param varstr - the expression to evaluate.
-        :returns int - the value of the expression."""
+        :param: varstr - the expression to evaluate.
+        :returns: int - the value of the expression."""
         varstr = str(varstr).strip("<>{}")
         evaluator = aliasing.evaluators.MathEvaluator.with_character(self)
 
@@ -445,8 +445,8 @@ class Character(StatBlock):
     def remove_known_spell(self, sb_spell):
         """
         Removes a spell from the character's spellbook override.
-        :param sb_spell: The spell to remove.
-        :type sb_spell SpellbookSpell
+        :param: sb_spell: The spell to remove.
+        :type: sb_spell SpellbookSpell
         """
         if sb_spell not in self.overrides.spells:
             raise InvalidArgument("This spell is not in the overrides.")
@@ -547,7 +547,7 @@ class Character(StatBlock):
         Currently updates settings, overrides, cvars, active guilds, consumables, overriden spellbook spells,
         hp, temp hp, death saves, used spell slots
         and caches the new character.
-        :type old_character Character
+        :type: old_character Character
         """
         # top level things
         self.options = old_character.options
@@ -582,7 +582,7 @@ class Character(StatBlock):
         if sb.num_pact_slots is not None:
             sb.num_pact_slots = min(
                 old_character.spellbook.num_pact_slots or 0,  # pact slots before update
-                sb.max_pact_slots,  # cannot have more then max
+                sb.max_pact_slots,  # cannot have more than max
                 sb.get_slots(sb.pact_slot_level),  # cannot gain slots out of nowhere
             )
 

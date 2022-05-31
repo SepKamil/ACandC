@@ -3,6 +3,7 @@ import logging
 import discord
 from discord.ext.commands import Context
 
+from cogs5e.exploration.encounter import Encounter
 from cogs5e.exploration.explore import Explore
 from cogs5e.initiative import Combat
 from cogs5e.models.character import Character
@@ -20,6 +21,7 @@ class AvraeContext(Context):
         self._character = _sentinel
         self._combat = _sentinel
         self._exploration = _sentinel
+        self._encounter = _sentinel
         self._server_settings = _sentinel
         # NLP metadata
         self.nlp_is_alias = False  # set in aliasing.helpers
@@ -68,6 +70,21 @@ class AvraeContext(Context):
         explore = await Explore.from_ctx(self)
         self._exploration = explore
         return explore
+
+    async def get_encounter(self, ignore_guild: bool = False):
+        """
+        Gets the encounter sheet active in this context.
+
+        :param bool ignore_guild: Whether to ignore any guild-active encounter sheet and return the global active sheet.
+        :raises NoEncounter: If the context has no encounter sheet (author has none active).
+        :rtype: Encounter
+        """
+        if not ignore_guild and self._encounter is not _sentinel:
+            return self._encounter
+        encounter = await Encounter.from_ctx(self, ignore_guild=ignore_guild)
+        if not ignore_guild:
+            self._encounter = encounter
+        return encounter
 
     async def get_server_settings(self):
         """

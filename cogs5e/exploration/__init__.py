@@ -12,3 +12,4 @@ from .cog import ExplorationTracker  # noqa E402
 
 def setup(bot):
     bot.add_cog(ExplorationTracker(bot))
+
