@@ -29,6 +29,7 @@ class Encounter:
         name: str = None,
         numappear: list = None,
         encountervalues: list = None,
+        dice_expression: str = None,
         active_guilds: list = None,
     ):
         if active_guilds is None:
@@ -44,6 +45,7 @@ class Encounter:
         self.name = name
         self.numappear = numappear
         self.encountervalues = encountervalues
+        self.dice_expression = dice_expression
 
     # ---------- Deserialization ----------
 
@@ -119,6 +121,7 @@ class Encounter:
             "name": self.name,
             "numappear": self.numappear,
             "encountervalues": self.encountervalues,
+            "dice_expression": self.dice_expression,
             "active_guilds": self._active_guilds,
         }
         return d
@@ -235,6 +238,7 @@ class Encounter:
 
         # combat details
         desc_details.append(f"**Name**: {self.name}")
+        desc_details.append(f"Dice to roll: {self.dice_expression}")
         length = len(self.numappear)
         for n in range(0, length):
             desc_details.append(f"{n+1}) {self.numappear[n]} {self.encountervalues[n]}")
@@ -266,28 +270,31 @@ class Encounter:
         """
         if self.encountervalues is None:
             raise NoEncounter
-        if self.numappear[number] is not None:
-            dice = self.numappear[number]
+        if self.numappear[number-1] is not None:
+            dice = self.numappear[number-1]
             adv = d20.AdvType.NONE
             res = d20.roll(dice, advantage=adv, allow_comments=True, stringifier=VerboseMDStringifier()).total
-            enc = (self.encountervalues[number], res, number+1)
+            enc = (self.encountervalues[number-1], res, number)
         else:
-            enc = (self.encountervalues[number], None, number+1)
+            enc = (self.encountervalues[number-1], None, number)
         return enc
 
-    def roll_encounters(self, number):
+    def roll_encounters(self, number, chance):
         """
         Rolls random encounters
-        :param number: how many times it has to be rolled
+        :param: number: how many times it has to be rolled
+        :param: chance: how likely it is for an encounter to be rolled
         :return: List of (encounter, number appearing) tuples
         """
-        dice = "1d12+1d8"
+        dice = self.dice_expression
         adv = d20.AdvType.NONE
         encounters = []
         for n in range(number):
-            res = d20.roll(dice, advantage=adv, allow_comments=True, stringifier=VerboseMDStringifier())
-            total = res.total
-            encounters.append(self.get_renc(total))
+            chn = d20.roll("1d100", advantage=adv, allow_comments=True, stringifier=VerboseMDStringifier()).total
+            if chn > chance:
+                res = d20.roll(dice, advantage=adv, allow_comments=True, stringifier=VerboseMDStringifier())
+                total = res.total
+                encounters.append(self.get_renc(total))
         return encounters
 
 

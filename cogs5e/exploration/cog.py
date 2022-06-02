@@ -2,38 +2,27 @@ import logging
 from contextlib import suppress
 import collections
 import functools
-import cachetools
-import d20
-import discord
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
 
-from typing import Any, List, Optional, TYPE_CHECKING
+from discord.ext import commands
 from aliasing import helpers
 from cogs5e.exploration.explore import Explore
 from cogs5e.models.character import Character
-from cogs5e.models.errors import NoSelectionElements, InvalidArgument, ExternalImportError
-from cogs5e.utils import actionutils, checkutils, targetutils
-from cogs5e.utils.help_constants import *
+from cogs5e.models.errors import InvalidArgument
+
 from cogs5e.models.embeds import EmbedWithAuthor, EmbedWithCharacter, EmbedWithColor
-from gamedata.lookuputils import handle_source_footer, select_monster_full, select_spell_full
+
 from utils.argparser import argparse
-from utils import checks, constants
-from utils.argparser import argparse
-from utils.functions import confirm, get_guild_member, search_and_select, try_delete
-from utils.functions import search_and_select, try_delete
-from cogs5e.dice.inline import InlineRoller
-from cogs5e.dice.cog import Dice
-from cogs5e.dice.utils import string_search_adv
+from utils.functions import confirm, get_guild_member
+from utils.functions import try_delete
+
 from cogs5e.exploration.explorer import Explorer, PlayerExplorer
 from cogs5e.exploration.effect import Effect
-from . import utils, encounter
 import disnake
 from disnake.ext import commands
 from disnake.ext.commands import NoPrivateMessage
 
-from .encounter import Encounter
 from .group import ExplorerGroup
+from ..initiative import CombatNotFound
 from ..models.sheet.resistance import Resistances
 
 log = logging.getLogger(__name__)
@@ -156,17 +145,27 @@ class ExplorationTracker(commands.Cog):
         await exploration.final()
 
     @explore.command()
-    async def enctimer(self, ctx, nummin: int = 0, time: str = "M"):
+    async def enctimer(self, ctx, time: int, *args):
         """Changes the interval between rolling random encounters
-        Usage: !explore enctimer <number> <M/H>
-        M ensures the interval entered is expressed in minutes (tens of rounds)
-        H ensures the interval entered is expressed in hours (600s of rounds)"""
-        if time.upper() in ['M', 'MI', 'MIN', 'MINS', 'MINUTES']:
-            nummin = nummin * 10
-        elif time.upper() in ['H', 'HR', 'HOURS']:
-            nummin = nummin * 10 * 60
+        Usage: !explore enctimer <number> [-h]
+        __Valid Arguments__
+        -h ensures the interval entered is expressed in hours (600s of rounds), default is minutes"""
+        hour = "-h" in args
+        if hour:
+            time = time * 10 * 60
+        else:
+            time = time * 10
         exploration = await ctx.get_exploration()
-        exploration.set_enc_timer(nummin)
+        exploration.set_enc_timer(time)
+        await exploration.final()
+
+    @explore.command(name="chance")
+    async def setchance(self, ctx, percent: int):
+        """Sets the percentile chance of actually rolling on the encounter table. If not set, the chance is 100%
+        Usage: !explore chance 1..100
+        the chance must be a whole number"""
+        exploration = await ctx.get_exploration()
+        exploration.set_chance(percent)
         await exploration.final()
 
     @explore.command(name="join", aliases=["cadd", "dcadd"])
@@ -230,26 +229,33 @@ class ExplorationTracker(commands.Cog):
         If no number is entered, exploration will advance 1 round
         """
         exploration = await ctx.get_exploration()
+        try:
+            combat = await ctx.get_combat()
+        except CombatNotFound:
+            combat = None
 
-        if time.upper() in ['R', 'RD', 'RDS', 'ROUNDS']:
-            numrounds = numrounds
-        elif time.upper() in ['M', 'MI', 'MIN', 'MINS', 'MINUTES']:
-            numrounds = numrounds * 10
-        elif time.upper() in ['H', 'HR', 'HOURS']:
-            numrounds = numrounds * 10 * 60
+        if exploration.dm != str(ctx.author.id):
+            await ctx.send("Only the game master can advance the clock!")
+        else:
+            if combat is not None:
+                await ctx.send("Can't advance exploration during combat! Finish the combat first.")
+            else:
+                if time.upper() in ['R', 'RD', 'RDS', 'ROUNDS']:
+                    numrounds = numrounds
+                elif time.upper() in ['M', 'MI', 'MIN', 'MINS', 'MINUTES']:
+                    numrounds = numrounds * 10
+                elif time.upper() in ['H', 'HR', 'HOURS']:
+                    numrounds = numrounds * 10 * 60
 
-        messages = await exploration.skip_rounds(ctx, numrounds)
-        if len(messages) > 0:
-            embed = EmbedWithColor()
-            embed.description = "\n".join(messages)
-            await ctx.author.send(embed=embed)
-        out = [exploration.get_summary()]
-        log.warning("Testing")
-        log.warning(exploration.enctimer)
-        log.warning(exploration.encthreshold)
+                messages = await exploration.skip_rounds(ctx, numrounds)
+                if len(messages) > 0:
+                    embed = EmbedWithColor()
+                    embed.description = "\n".join(messages)
+                    await ctx.author.send(embed=embed)
+                out = [exploration.get_summary()]
 
-        await ctx.send("\n".join(out))
-        await exploration.final()
+                await ctx.send("\n".join(out))
+                await exploration.final()
 
     @explore.command(name="list", aliases=["summary"])
     async def list(self, ctx, *args):

@@ -198,6 +198,7 @@ class GoogleSheet(SheetLoaderABC):
         name = self.encounter_data.value("E3").strip() or "Unnamed"
         numappear = self.get_numberappearing()
         encountervalues = self.get_randomencountervalues()
+        dice_expression = self.get_dice_expression()
 
         encounter = Encounter(
             owner_id,
@@ -206,6 +207,7 @@ class GoogleSheet(SheetLoaderABC):
             name,
             numappear,
             encountervalues,
+            dice_expression
         )
         return encounter
 
@@ -218,13 +220,14 @@ class GoogleSheet(SheetLoaderABC):
         return await loop.run_in_executor(None, self._genc)
 
     def get_numberappearing(self):
+        """Returns a list of strings containing dice expressions used when rolling number of monsters"""
         if self.encounter_data is None:
             raise Exception("You must call get_encounter() first.")
         numappear = self.encounter_data.value_range("F8:F27")
         return numappear
 
     def get_randomencountervalues(self):
-        """Returns table values"""
+        """Returns a list of strings containing names of monsters/other encounters from the table"""
         if self.encounter_data is None:
             raise Exception("You must call get_encounter() first.")
         values = self.encounter_data.value_range("E8:E27")
@@ -235,3 +238,10 @@ class GoogleSheet(SheetLoaderABC):
                 raise MissingValues(cell, self.encounter_data.worksheet.title)
             i += 1
         return values
+
+    def get_dice_expression(self):
+        """Returns a string containing dice expression to use when rolling on the table"""
+        if self.encounter_data is None:
+            raise Exception("You must call get_encounter() first.")
+        d_exp = self.encounter_data.value("E5")
+        return d_exp

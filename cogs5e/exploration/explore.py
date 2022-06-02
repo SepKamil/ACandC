@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import discord
+import d20
 
 import disnake.ext.commands
 from typing import List
@@ -13,6 +14,7 @@ from .types import ExplorerType
 from .explorer import Explorer, PlayerExplorer
 from .group import ExplorerGroup
 from .errors import *
+from utils.dice import VerboseMDStringifier
 log = logging.getLogger(__name__)
 
 
@@ -34,7 +36,8 @@ class Explore:
         explorers: List[Explorer] = None,
         round_num: int = 0,
         enctimer: int = 0,
-        encthreshold: int = 0
+        encthreshold: int = 0,
+        chance: int = 100
     ):
         if explorers is None:
             explorers = []
@@ -47,6 +50,7 @@ class Explore:
         self.ctx = ctx
         self._enctimer = enctimer
         self._encthreshold = encthreshold
+        self._chance = chance
 
     @classmethod
     def new(cls, channel_id, message_id, dm_id, options, ctx):
@@ -82,6 +86,7 @@ class Explore:
             raw["round"],
             raw["enctimer"],
             raw["encthreshold"],
+            raw["chance"],
         )
         for e in raw["explorers"]:
             inst._explorers.append(await deserialize_explorer(e, ctx, inst))
@@ -114,6 +119,7 @@ class Explore:
             raw["round"],
             raw["enctimer"],
             raw["encthreshold"],
+            raw["chance"],
         )
         for e in raw["explorers"]:
             inst._explorers.append(deserialize_explorer_sync(e, ctx, inst))
@@ -128,7 +134,8 @@ class Explore:
             "explorers": [c.to_dict() for c in self._explorers],
             "round": self.round_num,
             "enctimer": self.enctimer,
-            "encthreshold": self.encthreshold
+            "encthreshold": self.encthreshold,
+            "chance": self._chance
         }
 
     # members
@@ -179,6 +186,14 @@ class Explore:
     @encthreshold.setter
     def encthreshold(self, value):
         self._encthreshold = value
+
+    @property
+    def chance(self):
+        return self._chance
+
+    @chance.setter
+    def chance(self, value):
+        self._chance = value
 
     @property
     def _explorer_id_map(self):
@@ -316,25 +331,35 @@ class Explore:
             selectkey=lambda c: f"{c.name} {c.hp_str()}",
         )
 
+    def set_chance(self, percent):
+        if percent > 100:
+            self.chance = 100
+        elif percent < 1:
+            self.chance = 1
+        else:
+            self.chance = percent
+
     def set_enc_timer(self, number):
         self.encthreshold = number
         self.enctimer = number
 
     async def skip_rounds(self, ctx, num_rounds):
         messages = []
-        enc = await ctx.get_encounter()
-        if self._enctimer != 0:
+        try:
+            enc = await ctx.get_encounter()
+        except NoEncounter:
+            enc = None
+        if self._enctimer != 0 and enc is not None:
             div = num_rounds // self._enctimer
-            mod =  num_rounds % self._enctimer
+            mod = num_rounds % self._enctimer
             log.warning(mod)
             log.warning(self._enctimer)
             if div == 0:
                 self._enctimer -= num_rounds
             else:
                 self._enctimer = self._encthreshold - mod
-                log.warning(self._enctimer)
-                encounter_list = enc.roll_encounters(div)
-                encounter_strs = [f"{div} random encounters rolled:\n"]
+                encounter_list = enc.roll_encounters(div, self.chance)
+                encounter_strs = ["Random encounters rolled:\n"]
                 for enc in encounter_list:
                     if enc[1] is None:
                         encounter_strs.append(f"{enc[2]}) {enc[0]}")

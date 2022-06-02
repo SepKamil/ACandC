@@ -25,6 +25,7 @@ from utils.argparser import argparse
 from utils.functions import confirm, get_guild_member, search_and_select, try_delete
 from . import Combat, Combatant, CombatantGroup, Effect, MonsterCombatant, PlayerCombatant, utils
 from .upenn_nlp import NLPRecorder
+from ..exploration import ExplorationNotFound
 
 log = logging.getLogger(__name__)
 
@@ -414,6 +415,12 @@ class InitTracker(commands.Cog):
 
         combat = await ctx.get_combat()
         servsettings = await ctx.get_server_settings()
+        try:
+            exploration = await ctx.get_exploration()
+            log.warning("Exploration found")
+        except ExplorationNotFound:
+            exploration = None
+            log.warning("Exploration not found")
 
         if len(combat.get_combatants()) == 0:
             await ctx.send("There are no combatants.")
@@ -456,6 +463,9 @@ class InitTracker(commands.Cog):
         await Stats.increase_stat(ctx, "turns_init_tracked_life")
         if advanced_round:
             await Stats.increase_stat(ctx, "rounds_init_tracked_life")
+            if exploration is not None:
+                await exploration.skip_rounds(ctx, 1)
+                await exploration.final()
 
         # build the output
         if combat.current_combatant is None:
@@ -515,6 +525,13 @@ class InitTracker(commands.Cog):
         """Skips one or more rounds of initiative."""
         combat = await ctx.get_combat()
 
+        try:
+            exploration = await ctx.get_exploration()
+            log.warning("Exploration found")
+        except ExplorationNotFound:
+            exploration = None
+            log.warning("Exploration not found")
+
         to_remove = []
         for co in combat.get_combatants():
             if isinstance(co, MonsterCombatant) and co.hp <= 0 and co is not combat.current_combatant:
@@ -533,6 +550,10 @@ class InitTracker(commands.Cog):
             out.append("{} automatically removed from combat.".format(co.name))
 
         await ctx.send("\n".join(out), allowed_mentions=combat.get_turn_str_mentions())
+
+        if exploration is not None:
+            await exploration.skip_rounds(ctx, 1)
+            await exploration.final()
         await combat.final()
 
     @init.command(name="reroll", aliases=["shuffle"])
