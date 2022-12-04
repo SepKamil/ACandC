@@ -257,6 +257,26 @@ class ExplorationTracker(commands.Cog):
                 await ctx.send("\n".join(out))
                 await exploration.final()
 
+    @explore.command()
+    async def rest(self, ctx, length: str):
+        exploration = await ctx.get_exploration()
+        try:
+            combat = await ctx.get_combat()
+        except CombatNotFound:
+            combat = None
+        if exploration.dm != str(ctx.author.id):
+            await ctx.send("Only the game master can declare rests!")
+        else:
+            if combat is not None:
+                await ctx.send("Can't rest during combat! Finish the combat first.")
+            else:
+                if length is "short":
+                    exploration.skip_rounds(600)
+                elif length is "long":
+                    exploration.skip_rounds(4800)
+                else:
+                    await ctx.send("Invalid rest length. It has to be either short or long")
+
     @explore.command(name="list", aliases=["summary"])
     async def list(self, ctx, *args):
         """Lists the explorers.

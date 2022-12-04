@@ -1,34 +1,36 @@
 import discord
 
 import cogs5e.models.character
-from cogs5e.templates.participant import Participant
+from cogs5e.models.errors import NoCharacter
 from cogs5e.models.sheet.attack import AttackList
-from cogs5e.models.sheet.base import BaseStats, Levels, Saves, Skills
+from cogs5e.models.sheet.base import BaseStats, Levels, Saves, Skill, Skills
 from cogs5e.models.sheet.resistance import Resistance, Resistances
 from cogs5e.models.sheet.spellcasting import Spellbook
 from cogs5e.models.sheet.statblock import DESERIALIZE_MAP, StatBlock
 from utils.constants import RESIST_TYPES
 from utils.functions import combine_maybe_mods, get_guild_member, search_and_select
 from .effect import Effect
-from .errors import ExplorationException, RequiresContext
-from .types import ExplorerType
-from .utils import create_explorer_id
+from .errors import OEventException, RequiresContext
+from .types import BaseParticipant, ParticipantType
+from .utils import create_participant_id
 
-participant_name = 'explorer'
-participant_name_plural = 'explorers'
-participant_name_capital = 'Explorer'
-ongoing_event_name = 'exploration'
-ongoing_event_name_capital = 'Exploration'
+participant_name = 'participant'
+participant_name_plural = 'participants'
+participant_name_capital = 'Participant'
+ongoing_event_name = 'ongoing event'
+ongoing_event_name_capital = 'Ongoing event'
 article = 'an'
 
 
-class Explorer(Participant, StatBlock):
+class Participant(BaseParticipant, StatBlock):
+    DESERIALIZE_MAP = DESERIALIZE_MAP  # allow making class-specific deser maps
+    type = ParticipantType.GENERIC
 
     def __init__(
         self,
         # init metadata
         ctx,
-        exploration,
+        ongoing_event,
         id: str,
         name: str,
         controller_id: str,
@@ -69,7 +71,7 @@ class Explorer(Participant, StatBlock):
         if effects is None:
             effects = []
         self.ctx = ctx
-        self.exploration = exploration
+        self.ongoing_event = ongoing_event
         self.id = id
 
         self._controller = controller_id
@@ -90,15 +92,15 @@ class Explorer(Participant, StatBlock):
         private: bool,
         resists: Resistances,
         ctx,
-        exploration,
+        ongoing_event,
     ):
         skills = Skills.default()
 
         levels = Levels({"Monster": 0})
-        id = create_explorer_id()
+        id = create_participant_id()
         return cls(
             ctx,
-            exploration,
+            ongoing_event,
             id,
             name,
             controller_id,
@@ -111,14 +113,14 @@ class Explorer(Participant, StatBlock):
         )
 
     @classmethod
-    def from_dict(cls, raw, ctx, exploration):
+    def from_dict(cls, raw, ctx, ongoing_event):
         for key, klass in cls.DESERIALIZE_MAP.items():
             if key in raw:
                 raw[key] = klass.from_dict(raw[key])
         del raw["type"]
         effects = raw.pop("effects")
-        inst = cls(ctx, exploration, **raw)
-        inst._effects = [Effect.from_dict(e, exploration, inst) for e in effects]
+        inst = cls(ctx, ongoing_event, **raw)
+        inst._effects = [Effect.from_dict(e, ongoing_event, inst) for e in effects]
         return inst
 
     def to_dict(self):
@@ -173,7 +175,7 @@ class Explorer(Participant, StatBlock):
         self._hp = new_hp
 
     def hp_str(self, private=False):
-        """Returns a string representation of the explorer's HP."""
+        f"""Returns a string representation of the {participant_name}'s HP."""
         out = ""
         if not self.is_private or private:
             if self.max_hp is not None and self.hp is not None:
@@ -266,19 +268,19 @@ class Explorer(Participant, StatBlock):
         return {e.id: e for e in self._effects}
 
     def set_group(self, group_name):
-        self.exploration.remove_explorer(self, ignore_remove_hook=True)
+        self.ongoing_event.remove_participant(self, ignore_remove_hook=True)
         if isinstance(group_name, str) and group_name.lower() == "none":
             group_name = None
         if group_name is None:
-            self.exploration.add_explorer(self)
+            self.ongoing_event.add_participant(self)
             return None
         else:
-            c_group = self.exploration.get_group(group_name)
-            c_group.add_explorer(self)
+            c_group = self.ongoing_event.get_group(group_name)
+            c_group.add_participant(self)
             return c_group
 
     def get_group(self):
-        return self.exploration.get_group(self._group_id) if self._group_id else None
+        return self.ongoing_event.get_group(self._group_id) if self._group_id else None
 
     # effects
     def add_effect(self, effect):
@@ -368,7 +370,7 @@ class Explorer(Participant, StatBlock):
         return f"<@{self.controller}>"
 
     async def message_controller(self, ctx, *args, **kwargs):
-        """Sends a message to the explorer's controller."""
+        f"""Sends a message to the {participant_name}'s controller."""
         if ctx.guild is None:
             raise RequiresContext("message_controller requires a guild context.")
         if int(self.controller) == ctx.bot.user.id:  # don't message self
@@ -397,16 +399,16 @@ class Explorer(Participant, StatBlock):
             e.on_round_end(num_rounds)
 
     def on_remove(self):
-        """
-        Called when the explorer is removed from exploration, either through !i remove or the exploration ending.
+        f"""
+        Called when the {participant_name} is removed from {ongoing_event_name}, either through !i remove or the {ongoing_event_name} ending.
         """
         pass
 
     # stringification
     def get_summary(self, private=False, no_notes=False):
-        """
-        Gets a short summary of an explorer's status.
-        :return: A string describing the explorer.
+        f"""
+        Gets a short summary of {article} {participant_name}'s status.
+        :return: A string describing the {participant_name}.
         """
         hp_str = f"{self.hp_str(private)} " if self.hp_str(private) else ""
         if not no_notes:
@@ -415,10 +417,10 @@ class Explorer(Participant, StatBlock):
             return f"{self.name} {hp_str}"
 
     def get_status(self, private=False):
-        """
-        Gets the start-of-turn status of an explorer.
+        f"""
+        Gets the start-of-turn status of {article} {participant_name}.
         :param private: Whether to return the full revealed stats or not.
-        :return: A string describing the explorer.
+        :return: A string describing the {participant_name}.
         """
         name = self.name
         hp_ac = self._get_hp_and_ac(private)
@@ -465,17 +467,17 @@ class Explorer(Participant, StatBlock):
         return f"{self.name}: {self.hp_str()}".strip()
 
     def __hash__(self):
-        return hash(f"{self.exploration.channel}.{self.name}")
+        return hash(f"{self.ongoing_event.channel}.{self.name}")
 
 
-class PlayerExplorer(Explorer):
-    type = ExplorerType.PLAYER
+class PlayerParticipant(Participant):
+    type = ParticipantType.PLAYER
 
-    super().__init__(
+    def __init__(
         self,
         # init metadata
         ctx,
-        exploration,
+        ongoing_event,
         id: str,
         name: str,
         controller_id: str,
@@ -493,11 +495,11 @@ class PlayerExplorer(Explorer):
         character_owner=None,
         **_,
     ):
-        # note that the player explorer doesn't initialize the statblock
-        # because we want the explorer statblock attrs to reference the character attrs
+        # note that the player participant doesn't initialize the statblock
+        # because we want the participant statblock attrs to reference the character attrs
         super().__init__(
             ctx,
-            exploration,
+            ongoing_event,
             id,
             name,
             controller_id,
@@ -516,11 +518,11 @@ class PlayerExplorer(Explorer):
         self._character = None  # cache
 
     @classmethod
-    async def from_character(cls, character, ctx, exploration, controller_id, private=True):
-        id = create_explorer_id()
+    async def from_character(cls, character, ctx, ongoing_event, controller_id, private=True):
+        id = create_participant_id()
         inst = cls(
             ctx,
-            exploration,
+            ongoing_event,
             id,
             character.name,
             controller_id,
@@ -536,8 +538,8 @@ class PlayerExplorer(Explorer):
 
     # ==== serialization ====
     @classmethod
-    async def from_dict(cls, raw, ctx, exploration):
-        inst = super().from_dict(raw, ctx, exploration)
+    async def from_dict(cls, raw, ctx, ongoing_event):
+        inst = super().from_dict(raw, ctx, ongoing_event)
         inst.character_id = raw["character_id"]
         inst.character_owner = raw["character_owner"]
         inst._character = await cogs5e.models.character.Character.from_bot_and_ids(
@@ -546,8 +548,8 @@ class PlayerExplorer(Explorer):
         return inst
 
     @classmethod
-    def from_dict_sync(cls, raw, ctx, exploration):
-        inst = super().from_dict(raw, ctx, exploration)
+    def from_dict_sync(cls, raw, ctx, ongoing_event):
+        inst = super().from_dict(raw, ctx, ongoing_event)
         inst.character_id = raw["character_id"]
         inst.character_owner = raw["character_owner"]
         inst._character = cogs5e.models.character.Character.from_bot_and_ids_sync(
@@ -565,9 +567,9 @@ class PlayerExplorer(Explorer):
 
     # ==== helpers ====
     async def update_character_ref(self, ctx, inst=None):
-        """
+        f"""
         Updates the character reference in self._character to ensure that it references the cached Character instance
-        if one is cached (since Exploration cache TTL > Character cache TTL), preventing instance divergence.
+        if one is cached (since {ongoing_event_name_capital} cache TTL > Character cache TTL), preventing instance divergence.
 
         If ``inst`` is passed, sets the character to reference the given instance, otherwise retrieves it via the normal
         Character init flow (from cache or db). ``inst`` should be a Character instance with the same character ID and
