@@ -14,14 +14,6 @@ from .errors import *
 from .group import ParticipantGroup
 from .types import ParticipantType
 
-COMBAT_TTL = 60 * 60 * 24 * 7  # 1 week TTL
-participant_name = 'participant'
-participant_name_plural = 'participants'
-participant_name_capital = 'Participant'
-ongoing_event_name = 'ongoing event'
-ongoing_event_name_capital = 'Ongoing event'
-article = 'an'
-
 
 # ==== code ====
 class OngoingEvent:
@@ -42,12 +34,15 @@ class OngoingEvent:
         participants: List[Participant] = None,
         round_num: int = 0,
         current_index: Optional[int] = None,
-        metadata: dict = None,
+        participant_name: str = 'participant',
+        participant_name_plural: str = 'participants',
+        participant_name_capital: str = 'Participant',
+        ongoing_event_name: str = 'ongoing event',
+        ongoing_event_name_capital: str = 'Ongoing event',
+        article: str = 'an'
     ):
         if participants is None:
             participants = []
-        if metadata is None:
-            metadata = {}
         self._channel = str(channel_id)  # readonly
         self._summary = int(message_id)  # readonly
         self._dm = str(dm_id)
@@ -56,7 +51,12 @@ class OngoingEvent:
         self._round = round_num
         self._current_index = current_index
         self.ctx = ctx
-        self._metadata = metadata
+        self.participant_name = participant_name,
+        self.participant_name_plural = participant_name_plural,
+        self.participant_name_capital = participant_name_capital,
+        self.ongoing_event_name = ongoing_event_name,
+        self.ongoing_event_name_capital = ongoing_event_name_capital,
+        self.article = article
 
     @classmethod
     def new(cls, channel_id, message_id, dm_id, options, ctx):
@@ -92,7 +92,6 @@ class OngoingEvent:
             [],
             raw["round"],
             raw["current"],
-            raw.get("metadata"),
         )
         for c in raw["participants"]:
             inst._participants.append(await deserialize_participant(c, ctx, inst))
@@ -124,7 +123,6 @@ class OngoingEvent:
             [],
             raw["round"],
             raw["current"],
-            raw.get("metadata"),
         )
         for c in raw["participants"]:
             inst._participants.append(deserialize_participant_sync(c, ctx, inst))
@@ -139,7 +137,6 @@ class OngoingEvent:
             "participants": [c.to_dict() for c in self._participants],
             "round": self.round_num,
             "current": self._current_index,
-            "metadata": self._metadata,
         }
 
     # members
@@ -191,16 +188,16 @@ class OngoingEvent:
     @property
     def participants(self):
         f"""
-        A read-only copy of the {participant_name} list.
-        Note that this will not update if the underlying {participant_name} list changes.
-        Use this to access {article} {participant_name} given its index.
+        A read-only copy of the {self.participant_name} list.
+        Note that this will not update if the underlying {self.participant_name} list changes.
+        Use this to access {self.article} {self.participant_name} given its index.
         """
         return tuple(self._participants)
 
     @property
     def current_participant(self):
         f"""
-        The {participant_name} whose turn it currently is.
+        The {self.participant_name} whose turn it currently is.
 
         :rtype: Participant
         """
@@ -210,7 +207,7 @@ class OngoingEvent:
 
     @property
     def next_participant(self):
-        f"""The {participant_name} whose turn it will be when advance_turn() is called."""
+        f"""The {self.participant_name} whose turn it will be when advance_turn() is called."""
         if len(self._participants) == 0:
             return None
         if self.index is None:
@@ -223,11 +220,11 @@ class OngoingEvent:
 
     def get_participants(self, groups=False):
         f"""
-        Returns a list of all {participant_name_capital} in {article} {ongoing_event_name}, regardless of if they are in a group.
-        Differs from ._{participant_name} since that won't yield {participant_name_plural} in groups.
+        Returns a list of all {self.participant_name_capital} in {self.article} {self.ongoing_event_name}, regardless of if they are in a group.
+        Differs from ._{self.participant_name} since that won't yield {self.participant_name_plural} in groups.
 
-        :param groups: Whether to return {participant_name_capital}Group objects in the list.
-        :return: A list of all {participant_name_plural} (and optionally groups).
+        :param groups: Whether to return {self.participant_name_capital}Group objects in the list.
+        :return: A list of all {self.participant_name_plural} (and optionally groups).
         """
         participants = []
         for c in self._participants:
@@ -241,27 +238,27 @@ class OngoingEvent:
 
     def get_groups(self):
         f"""
-        Returns a list of all {participant_name_capital}Groups in {article} {ongoing_event_name}
-        :return: A list of all {participant_name_capital}Groups
+        Returns a list of all {self.participant_name_capital}Groups in {self.article} {self.ongoing_event_name}
+        :return: A list of all {self.participant_name_capital}Groups
         """
         return [g for g in self._participants if isinstance(g, ParticipantGroup)]
 
     def add_participant(self, participant):
         f"""
-        Adds a participant to {ongoing_event_name}, and sorts the {participant_name} list by init.
+        Adds a participant to {self.ongoing_event_name}, and sorts the {self.participant_name} list by init.
 
-        :type {participant_name}: {participant_name_capital}
+        :type {self.participant_name}: {self.participant_name_capital}
         """
         self._participants.append(participant)
         self.sort_participants()
 
     def remove_participant(self, participant, ignore_remove_hook=False):
         f"""
-        Removes a participant from {ongoing_event_name}, sorts the {participant_name} list by init (updates index), and fires the remove hook.
+        Removes a participant from {self.ongoing_event_name}, sorts the {self.participant_name} list by init (updates index), and fires the remove hook.
 
-        :type {participant_name}: {participant_name_capital}
+        :type {self.participant_name}: {self.participant_name_capital}
         :param bool ignore_remove_hook: Whether or not to ignore the remove hook.
-        :rtype: {participant_name_capital}
+        :rtype: {self.participant_name_capital}
         """
         if not ignore_remove_hook:
             participant.on_remove()
@@ -303,12 +300,12 @@ class OngoingEvent:
     def get_participant(self, name, strict=None):
         f"""Gets a participant by their name or ID.
 
-        :param name: The name or id of the {participant_name}.
-        :param strict: Whether {participant_name} name must be a full case insensitive match.
+        :param name: The name or id of the {self.participant_name}.
+        :param strict: Whether {self.participant_name} name must be a full case insensitive match.
             If this is ``None`` (default), attempts a strict match with fallback to partial match.
             If this is ``False``, it returns the first partial match.
             If this is ``True``, it will only return a strict match.
-        :return: The {participant_name} or None.
+        :return: The {self.participant_name} or None.
         """
         if name in self._participant_id_map:
             return self._participant_id_map[name]
@@ -322,12 +319,12 @@ class OngoingEvent:
 
     def get_group(self, name, create=None, strict=None):
         f"""
-        Gets a {participant_name} group by its name or ID.
+        Gets a {self.participant_name} group by its name or ID.
 
-        :rtype: {participant_name_capital}Group
-        :param name: The name of the {participant_name} group.
+        :rtype: {self.participant_name_capital}Group
+        :param name: The name of the {self.participant_name} group.
         :param create: The initiative to create a group at if a group is not found.
-        :param strict: Whether {participant_name} name must be a full case insensitive match.
+        :param strict: Whether {self.participant_name} name must be a full case insensitive match.
             If this is ``None`` (default), attempts a strict match with fallback to partial match.
             If this is ``False``, it returns the first partial match.
             If this is ``True``, it will only return a strict match.
@@ -349,7 +346,7 @@ class OngoingEvent:
         return grp
 
     def _check_empty_groups(self):
-        f"""Removes any empty groups in the {ongoing_event_name}."""
+        f"""Removes any empty groups in the {self.ongoing_event_name}."""
         # removed = False
         for c in self._participants:
             if isinstance(c, ParticipantGroup) and len(c.get_participants()) == 0:
@@ -391,13 +388,13 @@ class OngoingEvent:
 
     async def select_participant(self, name, choice_message=None, select_group=False):
         f"""
-        Opens a prompt for a user to select the {participant_name} they were searching for.
+        Opens a prompt for a user to select the {self.participant_name} they were searching for.
 
         :param choice_message: The message to pass to the selector.
         :param select_group: Whether to allow groups to be selected.
-        :rtype: {participant_name_capital}
-        :param name: The name of the {participant_name} to search for.
-        :return: The selected {participant_name_capital}, or None if the search failed.
+        :rtype: {self.participant_name_capital}
+        :param name: The name of the {self.participant_name} to search for.
+        :return: The selected {self.participant_name_capital}, or None if the search failed.
         """
         return await search_and_select(
             self.ctx,
@@ -472,7 +469,7 @@ class OngoingEvent:
     #
     #     self._turn = self.current_participant.init
 
-    def skip_rounds(self, num_rounds):
+    def skip_rounds(self, ctx, num_rounds):
         messages = []
 
         self._round += num_rounds
@@ -485,7 +482,7 @@ class OngoingEvent:
         return messages
 
     async def end(self):
-        f"""Ends {ongoing_event_name} in a channel."""
+        f"""Ends {self.ongoing_event_name} in a channel."""
         for c in self._participants:
             c.on_remove()
         await self.ctx.bot.mdb.ongoing_events.delete_one({"channel": self.channel})
@@ -559,7 +556,7 @@ class OngoingEvent:
 
     # db
     async def commit(self):
-        f"""Commits the {ongoing_event_name} to db."""
+        f"""Commits the {self.ongoing_event_name} to db."""
         if not self.ctx:
             raise RequiresContext
         for pc in self.get_participants():
@@ -584,7 +581,7 @@ class OngoingEvent:
         await self.get_summary_msg().edit(content=self.get_summary())
 
     def get_channel(self):
-        f"""Gets the Channel object of the {ongoing_event_name}."""
+        f"""Gets the Channel object of the {self.ongoing_event_name}."""
         if self.ctx:
             return self.ctx.channel
         else:
@@ -595,7 +592,7 @@ class OngoingEvent:
                 raise OEventChannelNotFound()
 
     def get_summary_msg(self):
-        f"""Gets the Message object of the {ongoing_event_name} summary."""
+        f"""Gets the Message object of the {self.ongoing_event_name} summary."""
         return discord.PartialMessage(channel=self.get_channel(), id=self.summary)
 
     def __str__(self):
@@ -617,7 +614,7 @@ async def deserialize_participant(raw_participant, ctx, ongoing_event):
     elif ctype == ParticipantType.GROUP:
         return await ParticipantGroup.from_dict(raw_participant, ctx, ongoing_event)
     else:
-        raise OEventException(f"Unknown {participant_name} type: {raw_participant['type']}")
+        raise OEventException(f"Unknown type: {raw_participant['type']}")
 
 
 def deserialize_participant_sync(raw_participant, ctx, ongoing_event):
@@ -635,4 +632,4 @@ def deserialize_participant_sync(raw_participant, ctx, ongoing_event):
     elif ctype == ParticipantType.GROUP:
         return ParticipantGroup.from_dict_sync(raw_participant, ctx, ongoing_event)
     else:
-        raise OEventException(f"Unknown {participant_name} type: {raw_participant['type']}")
+        raise OEventException(f"Unknown type: {raw_participant['type']}")

@@ -182,7 +182,7 @@ class Effect:
 
     def _duration_cmp(self):
         """
-        Returns a tuple of (remaining_rounds, has_ticked_this_round, turn_index, end?).
+        Returns a tuple of (remaining_rounds, has_ticked_this_round, end?).
         Find the minimal of all of these in the effect parent hierarchy to find the effect that will end first.
         """
         remaining = self.remaining if self.remaining >= 0 else float("inf")
@@ -203,7 +203,7 @@ class Effect:
             parent = parent.get_parent_effect()
 
         # unpack and build string
-        remaining, _, index, ticks_on_end = min_duration
+        remaining, _, ticks_on_end = min_duration
         if math.isinf(remaining):
             return ""
         elif remaining > 5_256_000:  # years

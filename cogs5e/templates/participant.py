@@ -35,6 +35,7 @@ class Participant(BaseParticipant, StatBlock):
         name: str,
         controller_id: str,
         private: bool,
+        index: int = None,
         notes: str = None,
         effects: list = None,
         group_id: str = None,
@@ -76,6 +77,7 @@ class Participant(BaseParticipant, StatBlock):
 
         self._controller = controller_id
         self._private = private
+        self._index = index
         self._notes = notes
         self._effects = effects
         self._group_id = group_id
@@ -129,6 +131,7 @@ class Participant(BaseParticipant, StatBlock):
             {
                 "controller_id": self.controller,
                 "private": self.is_private,
+                "index": self.index,
                 "notes": self.notes,
                 "effects": [e.to_dict() for e in self._effects],
                 "group_id": self._group_id,
@@ -246,6 +249,17 @@ class Participant(BaseParticipant, StatBlock):
             # attacks granted by effects are cached so that the same object is referenced in initTracker (#950)
             self._cache["attacks"] = self._attacks + AttackList.from_dict(self.active_effects("attack"))
         return self._cache["attacks"]
+
+    @property
+    def index(self):
+        f"""The {participant_name}'s index in the {participant_name} array. If the {participant_name} is in a group, the group's index."""
+        if self._group_id:
+            return self.get_group().index
+        return self._index
+
+    @index.setter
+    def index(self, new_index):
+        self._index = new_index
 
     @property
     def notes(self):
@@ -471,6 +485,7 @@ class Participant(BaseParticipant, StatBlock):
 
 
 class PlayerParticipant(Participant):
+    DESERIALIZE_MAP = DESERIALIZE_MAP
     type = ParticipantType.PLAYER
 
     def __init__(
@@ -482,6 +497,7 @@ class PlayerParticipant(Participant):
         name: str,
         controller_id: str,
         private: bool = True,
+        index: int = None,
         notes: str = None,
         effects: list = None,
         group_id: str = None,
@@ -504,6 +520,7 @@ class PlayerParticipant(Participant):
             name,
             controller_id,
             private,
+            index,
             notes,
             effects,
             group_id,

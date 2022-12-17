@@ -160,7 +160,7 @@ class Effect:
         return self.get_str(duration=True, parenthetical=True, concentration=True, description=True)
 
     def get_short_str(self):
-        """Gets a short string describing the effect (for display in init summary)"""
+        """Gets a short string describing the effect"""
         return self.get_str(duration=True, parenthetical=False, concentration=False, description=False)
 
     def get_str(self, duration=True, parenthetical=True, concentration=True, description=True):
@@ -180,7 +180,7 @@ class Effect:
 
     def _duration_cmp(self):
         """
-        Returns a tuple of (remaining_rounds, has_ticked_this_round, turn_index, end?).
+        Returns a tuple of (remaining_rounds, has_ticked_this_round, turn_index end?).
         Find the minimal of all of these in the effect parent hierarchy to find the effect that will end first.
         """
         remaining = self.remaining if self.remaining >= 0 else float("inf")
@@ -188,8 +188,7 @@ class Effect:
             return remaining, 0, 0, 1 if self.ticks_on_end else 0
         index = self.participant.index
         has_ticked_this_round = self.ongoing_event.index is not None and (
-            (self.ongoing_event.index == index and not self.ticks_on_end) or self.ongoing_event.index > index
-        )
+            (self.ongoing_event.index == index and not self.ticks_on_end) or self.ongoing_event.index > index)
         return remaining, int(has_ticked_this_round), index, 1 if self.ticks_on_end else 0
 
     def _duration_str(self):
@@ -207,18 +206,19 @@ class Effect:
         remaining, _, index, ticks_on_end = min_duration
         if math.isinf(remaining):
             return ""
-        elif 0 <= remaining <= 1:  # effect ends on next tick
+        elif 1 >= remaining >= 0 != index:  # effect ends on next tick
             if self.participant is None or self.ongoing_event is None or index == self.participant.index:  # our turn
                 if ticks_on_end:
                     return "[until end of turn]"
                 else:
                     return "[until start of next turn]"
-            else:  # another participant's turn
+            else:  # another combatant's turn
                 participant = self.ongoing_event.participants[index]
                 if ticks_on_end:
                     return f"[until end of {participant.name}'s turn]"
                 else:
                     return f"[until start of {participant.name}'s next turn]"
+
         elif remaining > 5_256_000:  # years
             divisor, unit = 5256000, "year"
         elif remaining > 438_000:  # months
