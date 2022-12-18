@@ -270,28 +270,28 @@ class OngoingEvent:
             self._check_empty_groups()
         return self
 
-    # def sort_participants(self):
-    #     f"""
-    #     Sorts the participant list by place in init and updates {participant_name_plural}' indices.
-    #     """
-    #     if not self._participants:
-    #         self._current_index = None
-    #         self._turn = 0
-    #         return
-    #
-    #     current = None
-    #     if self._current_index is not None:
-    #         current = next((c for c in self._participants if c.index == self._current_index), None)
-    #
-    #     self._participants = sorted(self._participants, key=lambda k: (k.init, int(k.init_skill)), reverse=True)
-    #     for n, c in enumerate(self._participants):
-    #         c.index = n
-    #
-    #     if current is not None:
-    #         self._current_index = current.index
-    #         self._turn = current.init
-    #     else:
-    #         self._current_index = None
+    def sort_participants(self):
+        f"""
+        Sorts the participant list by place in init and updates {self.participant_name_plural}' indices.
+        """
+        if not self._participants:
+            self._current_index = None
+            self._turn = 0
+            return
+
+        current = None
+        if self._current_index is not None:
+            current = next((c for c in self._participants if c.index == self._current_index), None)
+
+        self._participants = sorted(self._participants, key=lambda k: (k.init, int(k.init_skill)), reverse=True)
+        for n, c in enumerate(self._participants):
+            c.index = n
+
+        if current is not None:
+            self._current_index = current.index
+            self._turn = current.init
+        else:
+            self._current_index = None
 
     def participant_by_id(self, participant_id):
         """Gets a participant by their ID."""
@@ -347,44 +347,44 @@ class OngoingEvent:
 
     def _check_empty_groups(self):
         f"""Removes any empty groups in the {self.ongoing_event_name}."""
-        # removed = False
+        removed = False
         for c in self._participants:
             if isinstance(c, ParticipantGroup) and len(c.get_participants()) == 0:
-                 self.remove_participant(c)
-        #         removed = True
-        # if removed:
-        #     self.sort_participants()
+                self.remove_participant(c)
+                removed = True
+        if removed:
+            self.sort_participants()
 
-    # def reroll_dynamic(self):
-    #     f"""
-    #     Rerolls all {participant_name} initiatives. Returns a string representing the new init order.
-    #     """
-    #     rolls = {}
-    #     for c in self._participants:
-    #         init_roll = roll(c.init_skill.d20())
-    #         c.init = init_roll.total
-    #         rolls[c] = init_roll
-    #     self.sort_participants()
-    #
-    #     # reset current turn
-    #     self.end_round()
-    #
-    #     order = []
-    #     for participant, init_roll in sorted(
-    #         rolls.items(), key=lambda r: (r[1].total, int(r[0].init_skill)), reverse=True
-    #     ):
-    #         order.append(f"{init_roll.result}: {participant.name}")
-    #
-    #     order = "\n".join(order)
-    #
-    #     return order
+    def reroll_dynamic(self):
+        f"""
+        Rerolls all {self.participant_name} initiatives. Returns a string representing the new init order.
+        """
+        rolls = {}
+        for c in self._participants:
+            init_roll = roll(c.init_skill.d20())
+            c.init = init_roll.total
+            rolls[c] = init_roll
+        self.sort_participants()
 
-    # def end_round(self):
-    #     f"""
-    #     Moves initiative to just before the next round (no active {participant_name} or group).
-    #     """
-    #     self._turn = 0
-    #     self._current_index = None
+        # reset current turn
+        self.end_round()
+
+        order = []
+        for participant, init_roll in sorted(
+            rolls.items(), key=lambda r: (r[1].total, int(r[0].init_skill)), reverse=True
+        ):
+            order.append(f"{init_roll.result}: {participant.name}")
+
+        order = "\n".join(order)
+
+        return order
+
+    def end_round(self):
+        f"""
+        Moves initiative to just before the next round (no active {self.participant_name} or group).
+        """
+        self._turn = 0
+        self._current_index = None
 
     async def select_participant(self, name, choice_message=None, select_group=False):
         f"""
@@ -412,62 +412,62 @@ class OngoingEvent:
 
         messages = []
 
-        # if self.current_participant:
-        #     self.current_participant.on_turn_end()
+        if self.current_participant:
+            self.current_participant.on_turn_end()
 
         changed_round = False
         if self.index is None:  # new round, no dynamic reroll
             self._current_index = 0
             self._round += 1
         elif self.index + 1 >= len(self._participants):  # new round
-            # if self.options.get("dynamic"):
-            #     messages.append(f"New initiatives:\n{self.reroll_dynamic()}")
-            # self._current_index = 0
+            if self.options.get("dynamic"):
+                messages.append(f"New initiatives:\n{self.reroll_dynamic()}")
+            self._current_index = 0
             self._round += 1
             changed_round = True
-        # else:
-        #     self._current_index += 1
+        else:
+            self._current_index += 1
 
-        # self._turn = self.current_participant.init
-        # self.current_participant.on_turn()
+        self._turn = self.current_participant.init
+        self.current_participant.on_turn()
         return changed_round, messages
 
-    # def rewind_turn(self):
-    #     if len(self._participants) == 0:
-    #         raise NoParticipants
-    #
-    #     # if self.current_participant:
-    #     #     self.current_participant.on_turn_end()
-    #
-    #     if self.index is None:  # start of ongoing_event
-    #         self._current_index = len(self._participants) - 1
-    #     elif self.index == 0:  # new round
-    #         self._current_index = len(self._participants) - 1
-    #         self._round -= 1
-    #     else:
-    #         self._current_index -= 1
-    #
-    #     self._turn = self.current_participant.init
+    def rewind_turn(self):
+        if len(self._participants) == 0:
+            raise NoParticipants
 
-    # def goto_turn(self, init_num, is_participant=False):
-    #     if len(self._participants) == 0:
-    #         raise NoParticipants
-    #
-    #     if self.current_participant:
-    #         self.current_participant.on_turn_end()
-    #
-    #     if is_participant:
-    #         if init_num.group:
-    #             init_num = self.get_group(init_num.group)
-    #         self._current_index = init_num.index
-    #     else:
-    #         target = next((c for c in self._participants if c.init <= init_num), None)
-    #         if target:
-    #             self._current_index = target.index
-    #         else:
-    #             self._current_index = 0
-    #
-    #     self._turn = self.current_participant.init
+        if self.current_participant:
+            self.current_participant.on_turn_end()
+
+        if self.index is None:  # start of ongoing_event
+            self._current_index = len(self._participants) - 1
+        elif self.index == 0:  # new round
+            self._current_index = len(self._participants) - 1
+            self._round -= 1
+        else:
+            self._current_index -= 1
+
+        self._turn = self.current_participant.init
+
+    def goto_turn(self, init_num, is_participant=False):
+        if len(self._participants) == 0:
+            raise NoParticipants
+
+        if self.current_participant:
+            self.current_participant.on_turn_end()
+
+        if is_participant:
+            if init_num.group:
+                init_num = self.get_group(init_num.group)
+            self._current_index = init_num.index
+        else:
+            target = next((c for c in self._participants if c.init <= init_num), None)
+            if target:
+                self._current_index = target.index
+            else:
+                self._current_index = 0
+
+        self._turn = self.current_participant.init
 
     def skip_rounds(self, ctx, num_rounds):
         messages = []
@@ -492,46 +492,46 @@ class OngoingEvent:
             pass
 
     # stringification
-    # def get_turn_str(self):
-    #     f"""Gets the string representing the current turn, and all {participant_name_plural} on it."""
-    #     participant = self.current_participant
-    #
-    #     if participant is None:
-    #         return None
-    #
-    #     if isinstance(participant, ParticipantGroup):
-    #         participants = participant.get_participants()
-    #         participant_statuses = "\n".join([co.get_status() for co in participants])
-    #         mentions = ", ".join({co.controller_mention() for co in participants})
-    #         out = (
-    #             f"**Initiative {self.turn_num} (round {self.round_num})**: {participant.name} ({mentions})\n"
-    #             f"```md\n{participant_statuses}```"
-    #         )
-    #
-    #     else:
-    #         out = (
-    #             f"**Initiative {self.turn_num} (round {self.round_num})**: {participant.name} "
-    #             f"({participant.controller_mention()})\n```md\n{participant.get_status()}```"
-    #         )
-    #
-    #     if self.options.get("turnnotif"):
-    #         nextTurn = self.next_participant
-    #         out += f"**Next up**: {nextTurn.name} ({nextTurn.controller_mention()})\n"
-    #     return out
-    #
-    # def get_turn_str_mentions(self):
-    #     """Gets the :class:`discord.AllowedMentions` for the users mentioned in the current turn str."""
-    #     if self.current_participant is None:
-    #         return discord.AllowedMentions.none()
-    #     if isinstance(self.current_participant, ParticipantGroup):
-    #         # noinspection PyUnresolvedReferences
-    #         user_ids = {discord.Object(id=int(comb.controller)) for comb in self.current_participant.get_participants()}
-    #     else:
-    #         user_ids = {discord.Object(id=int(self.current_participant.controller))}
-    #
-    #     if self.options.get("turnnotif") and self.next_participant is not None:
-    #         user_ids.add(discord.Object(id=int(self.next_participant.controller)))
-    #     return discord.AllowedMentions(users=list(user_ids))
+    def get_turn_str(self):
+        f"""Gets the string representing the current turn, and all {self.participant_name_plural} on it."""
+        participant = self.current_participant
+
+        if participant is None:
+            return None
+
+        if isinstance(participant, ParticipantGroup):
+            participants = participant.get_participants()
+            participant_statuses = "\n".join([co.get_status() for co in participants])
+            mentions = ", ".join({co.controller_mention() for co in participants})
+            out = (
+                f"**Initiative {self.turn_num} (round {self.round_num})**: {participant.name} ({mentions})\n"
+                f"```md\n{participant_statuses}```"
+            )
+
+        else:
+            out = (
+                f"**Initiative {self.turn_num} (round {self.round_num})**: {participant.name} "
+                f"({participant.controller_mention()})\n```md\n{participant.get_status()}```"
+            )
+
+        if self.options.get("turnnotif"):
+            nextTurn = self.next_participant
+            out += f"**Next up**: {nextTurn.name} ({nextTurn.controller_mention()})\n"
+        return out
+
+    def get_turn_str_mentions(self):
+        """Gets the :class:`discord.AllowedMentions` for the users mentioned in the current turn str."""
+        if self.current_participant is None:
+            return discord.AllowedMentions.none()
+        if isinstance(self.current_participant, ParticipantGroup):
+            # noinspection PyUnresolvedReferences
+            user_ids = {discord.Object(id=int(comb.controller)) for comb in self.current_participant.get_participants()}
+        else:
+            user_ids = {discord.Object(id=int(self.current_participant.controller))}
+
+        if self.options.get("turnnotif") and self.next_participant is not None:
+            user_ids.add(discord.Object(id=int(self.next_participant.controller)))
+        return discord.AllowedMentions(users=list(user_ids))
 
     def get_summary(self, private=False):
         """Returns the generated summary message (pinned) content."""
