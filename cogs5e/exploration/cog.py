@@ -122,12 +122,12 @@ class ExplorationTracker(commands.Cog):
 
         exploration = await ctx.get_exploration()
 
-        if exploration.get_explorer(name, True) is not None:
+        if exploration.get_participant(name, True) is not None:
             await ctx.send("Explorer already exists.")
             return
 
         me = Explorer.new(
-            name, controller, hp, ac, private, Resistances.from_dict(resists), ctx, exploration
+            name, controller, 0, hp, ac, private, Resistances.from_dict(resists), ctx, exploration
         )
 
         # -note (#1211)
@@ -135,11 +135,11 @@ class ExplorationTracker(commands.Cog):
             me.notes = note
 
         if group is None:
-            exploration.add_explorer(me)
+            exploration.add_participant(me)
             await ctx.send(f"{name} was added to exploration.")
         else:
             grp = exploration.get_group(group)
-            grp.add_explorer(me)
+            grp.add_participant(me)
             await ctx.send(f"{name} was added to exploration as part of group {grp.name}.")
 
         await exploration.final()
@@ -196,7 +196,7 @@ class ExplorationTracker(commands.Cog):
 
         exploration = await ctx.get_exploration()
 
-        if exploration.get_explorer(char.name, True) is not None:
+        if exploration.get_participant(char.name, True) is not None:
             await ctx.send("Explorer already exists.")
             return
 
@@ -207,11 +207,11 @@ class ExplorationTracker(commands.Cog):
             me.notes = note
 
         if group is None:
-            exploration.add_explorer(me)
+            exploration.add_participant(me)
             embed.set_footer(text="Added to exploration!")
         else:
             grp = exploration.get_group(group)
-            grp.add_explorer(me)
+            grp.add_participant(me)
             embed.set_footer(text=f"Joined group {grp.name}!")
 
         await exploration.final()
@@ -384,7 +384,7 @@ class ExplorationTracker(commands.Cog):
         async def name(explorer):
             old_name = explorer.name
             new_name = args.last("name")
-            if exploration.get_explorer(new_name, True) is not None:
+            if exploration.get_participant(new_name, True) is not None:
                 return f"\u274c There is already another explorer with the name {new_name}."
             elif new_name:
                 explorer.name = new_name
@@ -443,7 +443,7 @@ class ExplorationTracker(commands.Cog):
             status = "\n".join(
                 [
                     ex.get_status(private=private and str(ctx.author.id) == ex.controller)
-                    for ex in explorer.get_explorers()
+                    for ex in explorer.get_participants()
                 ]
             )
 
@@ -468,7 +468,7 @@ class ExplorationTracker(commands.Cog):
         for i, t in enumerate([target_name]):
             target = await exploration.select_explorer(t, f"Select target #{i + 1}.", select_group=True)
             if isinstance(target, ExplorerGroup):
-                targets.extend(target.get_explorers())
+                targets.extend(target.get_participants())
             else:
                 targets.append(target)
 
@@ -527,7 +527,7 @@ class ExplorationTracker(commands.Cog):
         for i, t in enumerate([target_name] + args.get("t")):
             target = await exploration.select_explorer(t, f"Select target #{i + 1}.", select_group=True)
             if isinstance(target, ExplorerGroup):
-                targets.extend(target.get_explorers())
+                targets.extend(target.get_participants())
             else:
                 targets.append(target)
 
@@ -593,7 +593,7 @@ class ExplorationTracker(commands.Cog):
 
         target = await exploration.select_explorer(name, select_group=True)
         if isinstance(target, ExplorerGroup):
-            targets.extend(target.get_explorers())
+            targets.extend(target.get_participants())
         else:
             targets.append(target)
 

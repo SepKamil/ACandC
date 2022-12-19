@@ -35,6 +35,7 @@ class Participant(BaseParticipant, StatBlock):
         name: str,
         controller_id: str,
         private: bool,
+        init: int = None,
         index: int = None,
         notes: str = None,
         effects: list = None,
@@ -78,6 +79,7 @@ class Participant(BaseParticipant, StatBlock):
         self._controller = controller_id
         self._private = private
         self._index = index
+        self._init = init
         self._notes = notes
         self._effects = effects
         self._group_id = group_id
@@ -89,6 +91,7 @@ class Participant(BaseParticipant, StatBlock):
         cls,
         name: str,
         controller_id: str,
+        init: int,
         max_hp: int,
         ac: int,
         private: bool,
@@ -107,6 +110,7 @@ class Participant(BaseParticipant, StatBlock):
             name,
             controller_id,
             private,
+            init,
             levels=levels,
             resistances=resists,
             skills=skills,
@@ -130,6 +134,7 @@ class Participant(BaseParticipant, StatBlock):
         d.update(
             {
                 "controller_id": self.controller,
+                "init": self.init,
                 "private": self.is_private,
                 "index": self.index,
                 "notes": self.notes,
@@ -156,6 +161,18 @@ class Participant(BaseParticipant, StatBlock):
     @controller.setter
     def controller(self, new_controller_id):
         self._controller = new_controller_id
+
+    @property
+    def init(self):
+        return self._init
+
+    @init.setter
+    def init(self, new_init):
+        self._init = new_init
+
+    @property
+    def init_skill(self):
+        return self.skills.initiative
 
     @property
     def max_hp(self):

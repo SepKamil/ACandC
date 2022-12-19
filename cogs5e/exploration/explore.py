@@ -99,7 +99,7 @@ class Explore(OngoingEvent):
             raw["chance"],
         )
         for e in raw["explorers"]:
-            inst._explorers.append(await deserialize_explorer(e, ctx, inst))
+            inst._explorers.append(await deserialize_participant(e, ctx, inst))
         return inst
 
     # sync deser/ser
@@ -132,7 +132,7 @@ class Explore(OngoingEvent):
             raw["chance"],
         )
         for e in raw["explorers"]:
-            inst._explorers.append(deserialize_explorer_sync(e, ctx, inst))
+            inst._explorers.append(deserialize_participant_sync(e, ctx, inst))
         return inst
 
     def to_dict(self):
@@ -249,9 +249,26 @@ class Explore(OngoingEvent):
                 explorer_strs.append(explorer_str)
         return out.format("\n".join(explorer_strs))
 
+    async def commit(self):
+        f"""Commits the {self.ongoing_event_name} to db."""
+        if not self.ctx:
+            raise RequiresContext
+        for pc in self.get_participants():
+            if isinstance(pc, PlayerExplorer):
+                await pc.character.commit(self.ctx)
+        await self.ctx.bot.mdb.explorations.update_one(
+            {"channel": self.channel}, {"$set": self.to_dict(), "$currentDate": {"lastchanged": True}}, upsert=True
+        )
+
     async def final(self):
         """Commit, update the summary message, and fire any recorder events in parallel."""
         await asyncio.gather(self.commit(), self.update_summary())
+
+    # misc
+    @staticmethod
+    async def ensure_unique_chan(ctx):
+        if await ctx.bot.mdb.explorations.find_one({"channel": str(ctx.channel.id)}):
+            raise ChannelInUse
 
     @staticmethod
     def duration_str(round_num):
