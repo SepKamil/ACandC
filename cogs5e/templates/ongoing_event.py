@@ -33,6 +33,7 @@ class OngoingEvent:
         ctx: disnake.ext.commands.Context,
         participants: List[Participant] = None,
         round_num: int = 0,
+        turn_num: int = 0,
         current_index: Optional[int] = None,
         participant_name: str = 'participant',
         participant_name_plural: str = 'participants',
@@ -49,6 +50,7 @@ class OngoingEvent:
         self._options = options  # readonly (?)
         self._participants = participants
         self._round = round_num
+        self._turn = turn_num
         self._current_index = current_index
         self.ctx = ctx
         self.participant_name = participant_name,

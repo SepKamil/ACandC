@@ -552,7 +552,7 @@ class InitTracker(commands.Cog):
         await ctx.send("\n".join(out), allowed_mentions=combat.get_turn_str_mentions())
 
         if exploration is not None:
-            await exploration.skip_rounds(ctx, 1)
+            await exploration.skip_rounds(ctx, numrounds)
             await exploration.final()
         await combat.final()
 

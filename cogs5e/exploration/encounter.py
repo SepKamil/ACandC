@@ -291,7 +291,7 @@ class Encounter:
         encounters = []
         for n in range(number):
             chn = d20.roll("1d100", advantage=adv, allow_comments=True, stringifier=VerboseMDStringifier()).total
-            if chn > chance:
+            if chn < chance:
                 res = d20.roll(dice, advantage=adv, allow_comments=True, stringifier=VerboseMDStringifier())
                 total = res.total
                 encounters.append(self.get_renc(total))

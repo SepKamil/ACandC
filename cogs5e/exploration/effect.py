@@ -203,7 +203,7 @@ class Effect:
             parent = parent.get_parent_effect()
 
         # unpack and build string
-        remaining, _, ticks_on_end = min_duration
+        remaining, _, index, ticks_on_end = min_duration
         if math.isinf(remaining):
             return ""
         elif remaining > 5_256_000:  # years
@@ -247,16 +247,22 @@ class Effect:
         return "; ".join(out)
 
     # --- hooks ---
-    def on_round(self, num_rounds=1):
+    def on_turn(self, num_rounds=1):
         """
         Reduces the round counter if applicable, and removes itself if at 0.
         """
+        message_str = ""
         if self.remaining >= 0 and not self.ticks_on_end:
             if self.remaining - num_rounds <= 0:
+                if self.name.lower() == "lantern":
+                    message_str = "lantern winks out!"
+                elif self.name.lower() == "torch":
+                    message_str = "torch burns out!"
                 self.remove()
             self.remaining -= num_rounds
+        return message_str
 
-    def on_round_end(self, num_rounds=1):
+    def on_turn_end(self, num_rounds=1):
         """
         Reduces the round counter if applicable, and removes itself if at 0.
         """

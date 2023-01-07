@@ -264,10 +264,16 @@ class Effect:
         """
         Reduces the turn counter if applicable, and removes itself if at 0.
         """
+        message_str = ""
         if self.remaining >= 0 and not self.ticks_on_end:
             if self.remaining - num_turns <= 0:
+                if self.name.lower() == "lantern":
+                    message_str = "lantern winks out!"
+                elif self.name.lower() == "torch":
+                    message_str = "torch burns out!"
                 self.remove()
             self.remaining -= num_turns
+        return message_str
 
     def on_turn_end(self, num_turns=1):
         """

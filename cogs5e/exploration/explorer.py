@@ -1,19 +1,11 @@
-import discord
-
-import cogs5e.models.character
 from cogs5e.templates.participant import Participant
 from cogs5e.templates.participant import PlayerParticipant
 from cogs5e.models.sheet.attack import AttackList
 from cogs5e.models.sheet.base import BaseStats, Levels, Saves, Skills
-from cogs5e.models.sheet.resistance import Resistance, Resistances
+from cogs5e.models.sheet.resistance import Resistances
 from cogs5e.models.sheet.spellcasting import Spellbook
 from cogs5e.models.sheet.statblock import DESERIALIZE_MAP
-from utils.constants import RESIST_TYPES
-from utils.functions import combine_maybe_mods, get_guild_member, search_and_select
-from .effect import Effect
-from .errors import ExplorationException, RequiresContext
 from .types import ExplorerType
-from .utils import create_explorer_id
 
 participant_name = 'explorer'
 participant_name_plural = 'explorers'
@@ -28,31 +20,32 @@ class Explorer(Participant):
     type = ExplorerType.GENERIC
 
     def __init__(
-        self,
-        # init metadata
-        ctx,
-        exploration,
-        id: str,
-        name: str,
-        controller_id: str,
-        private: bool,
-        notes: str = None,
-        effects: list = None,
-        group_id: str = None,
-        # statblock info
-        stats: BaseStats = None,
-        levels: Levels = None,
-        attacks: AttackList = None,
-        skills: Skills = None,
-        saves: Saves = None,
-        resistances: Resistances = None,
-        spellbook: Spellbook = None,
-        ac: int = None,
-        max_hp: int = None,
-        hp: int = None,
-        temp_hp: int = 0,
-        creature_type: str = None,
-        **_,
+            self,
+            # init metadata
+            ctx,
+            exploration,
+            id: str,
+            name: str,
+            controller_id: str,
+            private: bool,
+            init: int = 0,
+            notes: str = None,
+            effects: list = None,
+            group_id: str = None,
+            # statblock info
+            stats: BaseStats = None,
+            levels: Levels = None,
+            attacks: AttackList = None,
+            skills: Skills = None,
+            saves: Saves = None,
+            resistances: Resistances = None,
+            spellbook: Spellbook = None,
+            ac: int = None,
+            max_hp: int = None,
+            hp: int = None,
+            temp_hp: int = 0,
+            creature_type: str = None,
+            **_,
     ):
         super().__init__(
             ctx=ctx,
@@ -61,6 +54,7 @@ class Explorer(Participant):
             name=name,
             controller_id=controller_id,
             private=private,
+            init=init,
             notes=notes,
             effects=effects,
             group_id=group_id,
@@ -91,7 +85,24 @@ class Explorer(Participant):
 
         self._cache = {}
 
-    pass
+    def on_turn(self, num_rounds=1):
+        """
+        A method called at the start of the round
+        :param num_rounds: The number of rounds that just passed.
+        :return: A string containing messages from effects
+        """
+        message_list = []
+        s_name = self.name + "'s "
+        for e in self.get_effects().copy():
+            message_list.append(s_name + e.on_turn(num_rounds))
+        for m in message_list:
+            if m == s_name:
+                message_list.remove(m)
+        if len(message_list) > 0:
+            final_str = "\n".join(message_list)
+        else:
+            final_str = ""
+        return final_str
 
 
 class PlayerExplorer(PlayerParticipant):
@@ -99,26 +110,27 @@ class PlayerExplorer(PlayerParticipant):
     type = ExplorerType.PLAYER
 
     def __init__(
-        self,
-        # init metadata
-        ctx,
-        exploration,
-        id: str,
-        name: str,
-        controller_id: str,
-        private: bool,
-        notes: str = None,
-        effects: list = None,
-        group_id: str = None,
-        # statblock info
-        attacks: AttackList = None,
-        resistances: Resistances = None,
-        ac: int = None,
-        max_hp: int = None,
-        # character specific
-        character_id=None,
-        character_owner=None,
-        **_,
+            self,
+            # init metadata
+            ctx,
+            exploration,
+            id: str,
+            name: str,
+            controller_id: str,
+            private: bool,
+            init: int,
+            notes: str = None,
+            effects: list = None,
+            group_id: str = None,
+            # statblock info
+            attacks: AttackList = None,
+            resistances: Resistances = None,
+            ac: int = None,
+            max_hp: int = None,
+            # character specific
+            character_id=None,
+            character_owner=None,
+            **_,
     ):
         super().__init__(
             ctx,
@@ -127,6 +139,7 @@ class PlayerExplorer(PlayerParticipant):
             name,
             controller_id,
             private,
+            init,
             notes,
             effects,
             group_id,
@@ -140,4 +153,26 @@ class PlayerExplorer(PlayerParticipant):
 
         self._character = None  # cache
 
-    pass
+    def on_turn(self, num_rounds=1):
+        """
+        A method called at the start of the round
+        :param num_rounds: The number of rounds that just passed.
+        :return: A string containing messages from effects
+        """
+        message_list = []
+        s_name = self.name + "'s "
+        for e in self.get_effects().copy():
+            message_list.append(s_name + e.on_turn(num_rounds))
+        for m in message_list:
+            if m == s_name:
+                message_list.remove(m)
+        if len(message_list) > 0:
+            final_str = "\n".join(message_list)
+        else:
+            final_str = ""
+        return final_str
+
+    def hp_str(self, private=True):
+        out = ""
+        return out
+

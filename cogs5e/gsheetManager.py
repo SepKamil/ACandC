@@ -52,7 +52,7 @@ class GSheetManager(commands.Cog):
         embed = EmbedWithColor()
         private = "-p" in args
         destination = ctx if private else ctx.author
-        res = enc.roll_encounters(num)
+        res = enc.roll_encounters(num, 100)
         if num == 1:
             encounters = ["**Random encounter:**\n"]
         else:

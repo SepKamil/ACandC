@@ -23,6 +23,7 @@ from disnake.ext.commands import NoPrivateMessage
 
 from .group import ExplorerGroup
 from ..initiative import CombatNotFound
+from ..models.sheet.base import Skill
 from ..models.sheet.resistance import Resistances
 
 log = logging.getLogger(__name__)
@@ -126,8 +127,10 @@ class ExplorationTracker(commands.Cog):
             await ctx.send("Explorer already exists.")
             return
 
+        init_skill = Skill(0)
+
         me = Explorer.new(
-            name, controller, hp, ac, private, Resistances.from_dict(resists), ctx, exploration
+            name, controller, 0, init_skill, hp, ac, private, Resistances.from_dict(resists), ctx, exploration
         )
 
         # -note (#1211)
@@ -200,7 +203,7 @@ class ExplorationTracker(commands.Cog):
             await ctx.send("Explorer already exists.")
             return
 
-        me = await PlayerExplorer.from_character(char, ctx, exploration, controller)
+        me = await PlayerExplorer.from_character(char, ctx, exploration, controller, 0, True)
 
         # -note (#1211)
         if note:
@@ -248,13 +251,16 @@ class ExplorationTracker(commands.Cog):
                     numrounds = numrounds * 10 * 60
 
                 messages = await exploration.skip_rounds(ctx, numrounds)
-                if len(messages) > 0:
+                if len(messages[1]) > 0:
                     embed = EmbedWithColor()
-                    embed.description = "\n".join(messages)
+                    embed.description = "\n".join(messages[1])
                     await ctx.author.send(embed=embed)
                 out = [exploration.get_summary()]
-
                 await ctx.send("\n".join(out))
+                if messages[0] is not None and messages[0] != "":
+                    embed = EmbedWithColor()
+                    embed.description = messages[0]
+                    await ctx.send(embed=embed)
                 await exploration.final()
 
     @explore.command()
@@ -458,7 +464,7 @@ class ExplorationTracker(commands.Cog):
         Attaches torch or lantern as an effect to a target explorer
         Usage: !explore light <torch/lantern> <explorer's name>
         See `!help explore re` to remove effects.
-        """  # noqa: E501
+        """
         exploration = await ctx.get_exploration()
 
         targets = []
@@ -611,6 +617,20 @@ class ExplorationTracker(commands.Cog):
                 to_remove.remove()
                 out += f"Effect {to_remove.name} removed from {explorer.name}.\n{children_removed}"
         await ctx.send(out)
+        await exploration.final()
+
+    @explore.command(name="remove")
+    async def remove_explorer(self, ctx, *, name: str):
+        """Removes an explorer or group from the exploration.
+        Usage: `!explore remove <NAME>`"""
+        exploration = await ctx.get_exploration()
+
+        explorer = await exploration.select_explorer(name, select_group=True)
+        if explorer is None:
+            return await ctx.send("Explorer not found.")
+
+        exploration.remove_explorer(explorer)
+        await ctx.send("{} removed from exploration.".format(explorer.name))
         await exploration.final()
 
     @explore.command()
