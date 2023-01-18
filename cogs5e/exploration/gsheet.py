@@ -196,8 +196,8 @@ class GoogleSheet(SheetLoaderABC):
         active = False
         upstream = f"google-{self.url}"
         name = self.encounter_data.value("E3").strip() or "Unnamed"
-        numappear = self.get_numberappearing()
-        encountervalues = self.get_randomencountervalues()
+        num_appear = self.get_number_appearing()
+        encounter_values = self.get_random_encounter_values()
         dice_expression = self.get_dice_expression()
 
         encounter = Encounter(
@@ -205,8 +205,8 @@ class GoogleSheet(SheetLoaderABC):
             upstream,
             active,
             name,
-            numappear,
-            encountervalues,
+            num_appear,
+            encounter_values,
             dice_expression
         )
         return encounter
@@ -219,14 +219,14 @@ class GoogleSheet(SheetLoaderABC):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._genc)
 
-    def get_numberappearing(self):
+    def get_number_appearing(self):
         """Returns a list of strings containing dice expressions used when rolling number of monsters"""
         if self.encounter_data is None:
             raise Exception("You must call get_encounter() first.")
-        numappear = self.encounter_data.value_range("F8:F27")
-        return numappear
+        num_appear = self.encounter_data.value_range("F8:F27")
+        return num_appear
 
-    def get_randomencountervalues(self):
+    def get_random_encounter_values(self):
         """Returns a list of strings containing names of monsters/other encounters from the table"""
         if self.encounter_data is None:
             raise Exception("You must call get_encounter() first.")

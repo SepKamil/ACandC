@@ -27,8 +27,8 @@ class Encounter:
         upstream: str,
         active: bool,
         name: str = None,
-        numappear: list = None,
-        encountervalues: list = None,
+        num_appear: list = None,
+        encounter_values: list = None,
         dice_expression: str = None,
         active_guilds: list = None,
     ):
@@ -43,8 +43,8 @@ class Encounter:
 
         # main info
         self.name = name
-        self.numappear = numappear
-        self.encountervalues = encountervalues
+        self.num_appear = num_appear
+        self.encounter_values = encounter_values
         self.dice_expression = dice_expression
 
     # ---------- Deserialization ----------
@@ -119,8 +119,8 @@ class Encounter:
             "upstream": self._upstream,
             "active": self._active,
             "name": self.name,
-            "numappear": self.numappear,
-            "encountervalues": self.encountervalues,
+            "num_appear": self.num_appear,
+            "encounter_values": self.encounter_values,
             "dice_expression": self.dice_expression,
             "active_guilds": self._active_guilds,
         }
@@ -239,9 +239,9 @@ class Encounter:
         # combat details
         desc_details.append(f"**Name**: {self.name}")
         desc_details.append(f"Dice to roll: {self.dice_expression}")
-        length = len(self.numappear)
+        length = len(self.num_appear)
         for n in range(0, length):
-            desc_details.append(f"{n+1}) {self.numappear[n]} {self.encountervalues[n]}")
+            desc_details.append(f"{n+1}) {self.num_appear[n]} {self.encounter_values[n]}")
         embed.description = "\n".join(desc_details)
 
         return embed
@@ -268,15 +268,15 @@ class Encounter:
         :param number: result of the dice roll
         :return: tuple of encounter and number appearing
         """
-        if self.encountervalues is None:
+        if self.encounter_values is None:
             raise NoEncounter
-        if self.numappear[number-1] is not None:
-            dice = self.numappear[number-1]
+        if self.num_appear[number-1] is not None:
+            dice = self.num_appear[number-1]
             adv = d20.AdvType.NONE
             res = d20.roll(dice, advantage=adv, allow_comments=True, stringifier=VerboseMDStringifier()).total
-            enc = (self.encountervalues[number-1], res, number)
+            enc = (self.encounter_values[number-1], res, number)
         else:
-            enc = (self.encountervalues[number-1], None, number)
+            enc = (self.encounter_values[number-1], None, number)
         return enc
 
     def roll_encounters(self, number, chance):

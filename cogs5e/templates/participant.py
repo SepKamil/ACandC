@@ -1,7 +1,7 @@
 import discord
 
 import cogs5e.models.character
-from cogs5e.models.errors import NoCharacter
+
 from cogs5e.models.sheet.attack import AttackList
 from cogs5e.models.sheet.base import BaseStats, Levels, Saves, Skill, Skills
 from cogs5e.models.sheet.resistance import Resistance, Resistances
@@ -10,7 +10,7 @@ from cogs5e.models.sheet.statblock import DESERIALIZE_MAP, StatBlock
 from utils.constants import RESIST_TYPES
 from utils.functions import combine_maybe_mods, get_guild_member, search_and_select
 from .effect import Effect
-from .errors import OEventException, RequiresContext
+from .errors import RequiresContext
 from .types import BaseParticipant, ParticipantType
 from .utils import create_participant_id
 

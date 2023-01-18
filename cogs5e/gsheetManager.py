@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 class GSheetManager(commands.Cog):
     """
     Commands to load an encounter sheet into Exploration bot, and supporting commands to modify the sheet, as well as basic macros.
-    """  # noqa: E501
+    """
 
     def __init__(self, bot):
         self.bot = bot
@@ -43,9 +43,9 @@ class GSheetManager(commands.Cog):
         await try_delete(ctx.message)
 
     @commands.command()
-    async def rollenc(self, ctx, num: int = 1, *args):
+    async def roll_enc(self, ctx, num: int = 1, *args):
         """Rolls on the currently active encounter sheet as many times as indicated. If no number is submitted, will roll once
-        Usage: !rollenc <number> [-p]
+        Usage: !roll_enc <number> [-p]
         __Valid Arguments__
         -p - Sends the list to the channel instead of private message."""
         enc: Encounter = await ctx.get_encounter()
@@ -101,7 +101,7 @@ class GSheetManager(commands.Cog):
         If the sheet is already the server sheet, unsets the server sheet.
 
         All commands in the server that use your active sheet will instead use the server sheet, even if the active sheet is changed elsewhere.
-        """  # noqa: E501
+        """ 
         enc: Encounter = await Encounter.from_ctx(ctx, ignore_guild=True)
 
         if enc.is_active_server(ctx):
@@ -151,7 +151,7 @@ class GSheetManager(commands.Cog):
 
     @commands.command()
     @commands.max_concurrency(1, BucketType.user)
-    async def updateenc(self, ctx, *args):
+    async def update_enc(self, ctx, *args):
         """
         Updates the current encounter sheet, preserving all settings.
         __Valid Arguments__
